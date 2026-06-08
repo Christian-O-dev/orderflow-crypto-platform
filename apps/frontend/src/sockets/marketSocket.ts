@@ -7,15 +7,58 @@ import { io } from "socket.io-client";
 import { useMarketStore } from "../stores/marketStore";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:4000";
+const STRICT_MODE_DISCONNECT_DELAY_MS = 500;
+
+type MarketSocket = ReturnType<typeof io>;
+
+let socket: MarketSocket | null = null;
+let activeConsumers = 0;
+let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function connectMarketSocket() {
-  const socket = io(BACKEND_URL, {
+  activeConsumers += 1;
+
+  if (disconnectTimer) {
+    clearTimeout(disconnectTimer);
+    disconnectTimer = null;
+  }
+
+  const currentSocket = getMarketSocket();
+
+  if (!currentSocket.connected) {
+    useMarketStore.getState().setConnectionStatus("connecting");
+    currentSocket.connect();
+  }
+
+  return () => {
+    activeConsumers = Math.max(0, activeConsumers - 1);
+
+    if (activeConsumers > 0) {
+      return;
+    }
+
+    disconnectTimer = setTimeout(() => {
+      if (activeConsumers > 0) {
+        return;
+      }
+
+      socket?.disconnect();
+      socket?.removeAllListeners();
+      socket = null;
+      useMarketStore.getState().setConnectionStatus("disconnected");
+    }, STRICT_MODE_DISCONNECT_DELAY_MS);
+  };
+}
+
+function getMarketSocket() {
+  if (socket) {
+    return socket;
+  }
+
+  socket = io(BACKEND_URL, {
+    autoConnect: false,
     transports: ["websocket"],
   });
-
-  const { setConnectionStatus, setSnapshot } = useMarketStore.getState();
-
-  setConnectionStatus("connecting");
 
   socket.on("connect", () => {
     useMarketStore.getState().setConnectionStatus("connected");
@@ -30,15 +73,12 @@ export function connectMarketSocket() {
   });
 
   socket.on(SOCKET_EVENTS.MARKET_SNAPSHOT, (snapshot: MarketSnapshot) => {
-    setSnapshot(snapshot);
+    useMarketStore.getState().setSnapshot(snapshot);
   });
 
   socket.on(SOCKET_EVENTS.MARKET_ALERT, (alert: MarketAlert) => {
     useMarketStore.getState().addAlert(alert);
   });
 
-  return () => {
-    socket.disconnect();
-    setConnectionStatus("disconnected");
-  };
+  return socket;
 }
