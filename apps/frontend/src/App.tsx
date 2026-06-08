@@ -1,25 +1,32 @@
-function App() {
-  return (
-    <main className="min-h-screen bg-[#0B0E14] text-[#E5E7EB]">
-      <section className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-6">
-        <header className="border-b border-white/10 pb-4">
-          <p className="font-mono text-sm text-cyan-300">BTCUSDT</p>
-          <h1 className="mt-2 text-2xl font-semibold">
-            Order Flow Crypto Platform
-          </h1>
-        </header>
+import { useEffect } from "react";
+import { TerminalShell } from "./components/layout/TerminalShell";
+import { AlertsPanel } from "./components/market/AlertsPanel";
+import { DomTable } from "./components/market/DomTable";
+import { MarketHeader } from "./components/market/MarketHeader";
+import { TapeTable } from "./components/market/TapeTable";
+import { CvdChart } from "./features/charts/CvdChart";
+import { PriceChart } from "./features/charts/PriceChart";
+import { connectMarketSocket } from "./sockets/marketSocket";
 
-        <div className="grid flex-1 place-items-center">
-          <div className="w-full max-w-3xl border border-white/10 bg-[#111827] p-6">
-            <h2 className="text-lg font-semibold">Fase 0 preparada</h2>
-            <p className="mt-3 text-sm leading-6 text-[#9CA3AF]">
-              Frontend React, backend Node y paquete shared listos para empezar
-              con datos mock en la siguiente fase.
-            </p>
-          </div>
+function App() {
+  useEffect(() => connectMarketSocket(), []);
+
+  return (
+    <TerminalShell>
+      <MarketHeader />
+
+      <div className="mt-1.5 grid flex-1 gap-1.5 lg:grid-cols-[minmax(220px,0.72fr)_minmax(420px,1.8fr)] 2xl:grid-cols-[minmax(220px,0.68fr)_minmax(520px,1.85fr)_minmax(320px,0.92fr)]">
+        <DomTable />
+
+        <div className="grid min-h-0 content-start gap-1">
+          <PriceChart />
+          <CvdChart />
+          <AlertsPanel />
         </div>
-      </section>
-    </main>
+
+        <TapeTable />
+      </div>
+    </TerminalShell>
   );
 }
 

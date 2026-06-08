@@ -51,3 +51,8 @@ export type MarketAlert = {
   severity: "low" | "medium" | "high";
   timestamp: number;
 };
+
+export const SOCKET_EVENTS = {
+  MARKET_SNAPSHOT: "market:snapshot",
+  MARKET_ALERT: "market:alert",
+} as const;

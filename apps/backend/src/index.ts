@@ -2,6 +2,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import { createServer } from "node:http";
+import { Database } from "./database/index.js";
+import { createRealtimeServer } from "./realtime/socketServer.js";
 
 dotenv.config();
 
@@ -20,6 +22,9 @@ app.get("/health", (_req, res) => {
 });
 
 const server = createServer(app);
+const database = new Database();
+await database.connect();
+createRealtimeServer(server, { database });
 
 server.listen(port, () => {
   console.log(`Backend listening on http://localhost:${port}`);

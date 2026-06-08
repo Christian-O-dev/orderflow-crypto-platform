@@ -3,13 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
+    "packages/shared",
     "apps/frontend",
-    "apps/backend",
-    "packages/shared"
+    "apps/backend"
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "predev:frontend": "npm run build -w packages/shared",
     "dev:frontend": "npm run dev -w apps/frontend",
+    "predev:backend": "npm run build -w packages/shared",
     "dev:backend": "npm run dev -w apps/backend",
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces"
