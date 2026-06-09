@@ -9,17 +9,17 @@ import {
 
 const STORAGE_KEY = "orderflow.dashboard.layout.v1";
 const DEFAULT_COLUMNS = [22, 54, 24];
-const DEFAULT_ROWS = [56, 27, 17];
+const DEFAULT_ROWS = [82, 18];
 const MIN_COLUMN_WIDTHS = [220, 420, 280];
-const MIN_ROW_HEIGHTS = [220, 130, 100];
-const CENTER_HANDLE_TOTAL = 16;
+const MIN_ROW_HEIGHTS = [280, 100];
+const CENTER_HANDLE_TOTAL = 8;
 const HANDLE_STEP = 3;
 
 type ResizableDashboardProps = {
   dom: ReactNode;
   price: ReactNode;
-  cvd: ReactNode;
   alerts: ReactNode;
+  largeTrades: ReactNode;
   tape: ReactNode;
 };
 
@@ -47,8 +47,8 @@ type PersistedLayout = {
 export function ResizableDashboard({
   dom,
   price,
-  cvd,
   alerts,
+  largeTrades,
   tape,
 }: ResizableDashboardProps) {
   const dashboardRef = useRef<HTMLDivElement | null>(null);
@@ -170,24 +170,15 @@ export function ResizableDashboard({
         ref={centerRef}
         className="flex min-h-0 flex-col gap-1.5 lg:grid lg:gap-0"
         style={{
-          gridTemplateRows: `${toGridTrack(rows[0])} 8px ${toGridTrack(
-            rows[1],
-          )} 8px ${toGridTrack(rows[2])}`,
+          gridTemplateRows: `${toGridTrack(rows[0])} 8px ${toGridTrack(rows[1])}`,
         }}
       >
         <div className="min-h-0 overflow-hidden">{price}</div>
         <ResizeHandle
-          label="Ajustar precio y CVD"
+          label="Ajustar grafico y alertas"
           orientation="horizontal"
           onKeyStep={(direction) => adjustRows(0, direction)}
           onPointerDown={(event) => beginRowResize(0, event)}
-        />
-        <div className="min-h-0 overflow-hidden">{cvd}</div>
-        <ResizeHandle
-          label="Ajustar CVD y alertas"
-          orientation="horizontal"
-          onKeyStep={(direction) => adjustRows(1, direction)}
-          onPointerDown={(event) => beginRowResize(1, event)}
         />
         <div className="min-h-0 overflow-hidden">{alerts}</div>
       </div>
@@ -199,7 +190,10 @@ export function ResizableDashboard({
         onPointerDown={(event) => beginColumnResize(1, event)}
       />
 
-      <div className="min-h-0 overflow-hidden">{tape}</div>
+      <div className="flex min-h-0 flex-col gap-1.5 overflow-hidden lg:gap-1.5">
+        <div className="min-h-0 lg:h-[34%]">{largeTrades}</div>
+        <div className="min-h-0 flex-1">{tape}</div>
+      </div>
     </div>
   );
 }

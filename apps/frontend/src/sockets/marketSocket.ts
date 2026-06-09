@@ -1,7 +1,9 @@
 import {
   SOCKET_EVENTS,
+  type LargeTradeEvent,
   type MarketAlert,
   type MarketSnapshot,
+  type WhaleLiquidityLevel,
 } from "@orderflow/shared";
 import { io } from "socket.io-client";
 import { useMarketStore } from "../stores/marketStore";
@@ -78,6 +80,14 @@ function getMarketSocket() {
 
   socket.on(SOCKET_EVENTS.MARKET_ALERT, (alert: MarketAlert) => {
     useMarketStore.getState().addAlert(alert);
+  });
+
+  socket.on(SOCKET_EVENTS.MARKET_LARGE_TRADE, (largeTrade: LargeTradeEvent) => {
+    useMarketStore.getState().addLargeTrade(largeTrade);
+  });
+
+  socket.on(SOCKET_EVENTS.MARKET_WHALE_ORDERS, (whaleOrders: WhaleLiquidityLevel[]) => {
+    useMarketStore.getState().setWhaleOrders(whaleOrders);
   });
 
   return socket;

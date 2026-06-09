@@ -1,4 +1,5 @@
 import type {
+  LargeTradeEvent,
   MarketAlert,
   MarketSymbol,
   NormalizedTrade,
@@ -6,22 +7,24 @@ import type {
 } from "../types/market.js";
 
 const SYMBOL: MarketSymbol = "BTCUSDT";
-const LARGE_TRADE_THRESHOLD = Number(process.env.LARGE_TRADE_THRESHOLD ?? 1);
-const CVD_SPIKE_THRESHOLD = Number(process.env.CVD_SPIKE_THRESHOLD ?? 5);
-const CVD_SPIKE_WINDOW_MS = Number(process.env.CVD_SPIKE_WINDOW_MS ?? 5_000);
-const LIQUIDITY_WALL_THRESHOLD = Number(
-  process.env.LIQUIDITY_WALL_THRESHOLD ?? 8,
-);
 const LIQUIDITY_REMOVED_RATIO = 0.65;
 const ALERT_COOLDOWN_MS = 5_000;
 
 type AlertListener = (alert: MarketAlert) => void;
+type LargeTradeListener = (largeTrade: LargeTradeEvent) => void;
 
 export class SignalEngine {
   private listeners = new Set<AlertListener>();
+  private largeTradeListeners = new Set<LargeTradeListener>();
   private lastAlertAtByKey = new Map<string, number>();
   private cvdSamples: Array<{ timestamp: number; value: number }> = [];
   private previousLargeLevels = new Map<string, number>();
+  private largeTradeMediumUsd = Number(process.env.LARGE_TRADE_MEDIUM_USD ?? 100_000);
+  private largeTradeHighUsd = Number(process.env.LARGE_TRADE_HIGH_USD ?? 500_000);
+  private largeTradeWhaleUsd = Number(process.env.LARGE_TRADE_WHALE_USD ?? 1_000_000);
+  private cvdSpikeThreshold = Number(process.env.CVD_SPIKE_THRESHOLD ?? 5);
+  private cvdSpikeWindowMs = Number(process.env.CVD_SPIKE_WINDOW_MS ?? 5_000);
+  private liquidityWallThreshold = Number(process.env.LIQUIDITY_WALL_THRESHOLD ?? 8);
 
   onAlert(listener: AlertListener) {
     this.listeners.add(listener);
@@ -31,21 +34,45 @@ export class SignalEngine {
     };
   }
 
+  onLargeTrade(listener: LargeTradeListener) {
+    this.largeTradeListeners.add(listener);
+
+    return () => {
+      this.largeTradeListeners.delete(listener);
+    };
+  }
+
   processTrade(trade: NormalizedTrade, cvd: number) {
-    if (trade.quantity >= LARGE_TRADE_THRESHOLD) {
-      this.emitWithCooldown(`large_trade:${trade.side}`, {
+    const notionalUsd = trade.price * trade.quantity;
+    const largeTradeSeverity = this.getLargeTradeSeverity(notionalUsd);
+
+    if (largeTradeSeverity) {
+      const largeTrade: LargeTradeEvent = {
+        id: createLargeTradeId(trade),
+        exchange: trade.exchange,
+        symbol: trade.symbol,
+        side: trade.side,
+        price: trade.price,
+        quantity: trade.quantity,
+        notionalUsd,
+        severity: largeTradeSeverity,
+        timestamp: trade.timestamp,
+      };
+
+      this.emitLargeTrade(largeTrade);
+      this.emitWithCooldown(`large_trade:${trade.side}:${largeTradeSeverity}`, {
         id: createAlertId("large_trade"),
         type: "large_trade",
-        symbol: SYMBOL,
-        message: `${trade.side === "buy" ? "Compra" : "Venta"} grande detectada: ${trade.quantity.toFixed(4)} BTC cerca de ${trade.price.toFixed(2)}.`,
-        severity: trade.quantity >= LARGE_TRADE_THRESHOLD * 2 ? "high" : "medium",
+        symbol: trade.symbol,
+        message: `${trade.side === "buy" ? "Compra" : "Venta"} grande ejecutada: ${formatUsd(notionalUsd)} en ${trade.quantity.toFixed(4)} BTC cerca de ${trade.price.toFixed(2)}.`,
+        severity: largeTradeSeverity === "medium" ? "medium" : "high",
         timestamp: trade.timestamp,
       });
     }
 
     this.cvdSamples = [
       ...this.cvdSamples.filter(
-        (sample) => trade.timestamp - sample.timestamp <= CVD_SPIKE_WINDOW_MS,
+        (sample) => trade.timestamp - sample.timestamp <= this.cvdSpikeWindowMs,
       ),
       { timestamp: trade.timestamp, value: cvd },
     ];
@@ -55,13 +82,13 @@ export class SignalEngine {
     if (baselineSample) {
       const cvdDelta = cvd - baselineSample.value;
 
-      if (Math.abs(cvdDelta) >= CVD_SPIKE_THRESHOLD) {
+      if (Math.abs(cvdDelta) >= this.cvdSpikeThreshold) {
         this.emitWithCooldown(`cvd_spike:${Math.sign(cvdDelta)}`, {
           id: createAlertId("cvd_spike"),
           type: "cvd_spike",
           symbol: SYMBOL,
-          message: `Desequilibrio probable en CVD: cambio de ${cvdDelta.toFixed(4)} BTC en los ultimos ${Math.round(CVD_SPIKE_WINDOW_MS / 1000)}s.`,
-          severity: Math.abs(cvdDelta) >= CVD_SPIKE_THRESHOLD * 2 ? "high" : "medium",
+          message: `Desequilibrio probable en CVD: cambio de ${cvdDelta.toFixed(4)} BTC en los ultimos ${Math.round(this.cvdSpikeWindowMs / 1000)}s.`,
+          severity: Math.abs(cvdDelta) >= this.cvdSpikeThreshold * 2 ? "high" : "medium",
           timestamp: trade.timestamp,
         });
       }
@@ -75,7 +102,7 @@ export class SignalEngine {
       const size = level.bidSize > 0 ? level.bidSize : level.askSize;
       const side = level.bidSize > 0 ? "bid" : "ask";
 
-      if (size >= LIQUIDITY_WALL_THRESHOLD) {
+      if (size >= this.liquidityWallThreshold) {
         const key = `${side}:${level.price}`;
         currentLargeLevels.set(key, size);
 
@@ -84,7 +111,7 @@ export class SignalEngine {
           type: "liquidity_wall",
           symbol: SYMBOL,
           message: `Muro detectado en ${side.toUpperCase()} cerca de ${level.price.toFixed(2)} con ${size.toFixed(4)} BTC.`,
-          severity: size >= LIQUIDITY_WALL_THRESHOLD * 2 ? "high" : "medium",
+          severity: size >= this.liquidityWallThreshold * 2 ? "high" : "medium",
           timestamp: Date.now(),
         });
       }
@@ -124,8 +151,38 @@ export class SignalEngine {
       listener(alert);
     }
   }
+
+  private emitLargeTrade(largeTrade: LargeTradeEvent) {
+    for (const listener of this.largeTradeListeners) {
+      listener(largeTrade);
+    }
+  }
+
+  private getLargeTradeSeverity(notionalUsd: number): LargeTradeEvent["severity"] | null {
+    if (notionalUsd >= this.largeTradeWhaleUsd) {
+      return "whale";
+    }
+
+    if (notionalUsd >= this.largeTradeHighUsd) {
+      return "high";
+    }
+
+    if (notionalUsd >= this.largeTradeMediumUsd) {
+      return "medium";
+    }
+
+    return null;
+  }
 }
 
 function createAlertId(type: MarketAlert["type"]) {
   return `${type}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createLargeTradeId(trade: NormalizedTrade) {
+  return `large-trade-${trade.exchange}-${trade.tradeId}`;
+}
+
+function formatUsd(value: number) {
+  return `$${Math.round(value).toLocaleString("en-US")}`;
 }

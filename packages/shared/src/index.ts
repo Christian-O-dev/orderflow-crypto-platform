@@ -52,7 +52,56 @@ export type MarketAlert = {
   timestamp: number;
 };
 
+export type LargeTradeEvent = {
+  id: string;
+  exchange: Exchange;
+  symbol: MarketSymbol;
+  side: "buy" | "sell";
+  price: number;
+  quantity: number;
+  notionalUsd: number;
+  severity: "medium" | "high" | "whale";
+  timestamp: number;
+};
+
+export type WhaleLiquidityLevel = {
+  id: string;
+  exchange: Exchange;
+  symbol: MarketSymbol;
+  side: "bid" | "ask";
+  price: number;
+  quantity: number;
+  notionalUsd: number;
+  firstSeen: number;
+  lastSeen: number;
+  durationMs: number;
+  status: "active" | "cancelled" | "partially_removed";
+};
+
+export type ChartLiquidityBand = {
+  id: string;
+  side: "bid" | "ask";
+  price: number;
+  quantity: number;
+  notionalUsd: number;
+  status: WhaleLiquidityLevel["status"];
+  firstSeen: number;
+  lastSeen: number;
+};
+
+export type ChartTradeMarker = {
+  id: string;
+  side: "buy" | "sell";
+  price: number;
+  quantity: number;
+  notionalUsd: number;
+  severity: LargeTradeEvent["severity"];
+  timestamp: number;
+};
+
 export const SOCKET_EVENTS = {
   MARKET_SNAPSHOT: "market:snapshot",
   MARKET_ALERT: "market:alert",
+  MARKET_LARGE_TRADE: "market:large_trade",
+  MARKET_WHALE_ORDERS: "market:whale_orders",
 } as const;

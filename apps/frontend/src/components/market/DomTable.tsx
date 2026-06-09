@@ -13,7 +13,11 @@ const sizeFormat = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 5,
 });
 
-export function DomTable() {
+type DomTableProps = {
+  framed?: boolean;
+};
+
+export function DomTable({ framed = true }: DomTableProps) {
   const orderBook = useMarketStore(
     (state) => state.snapshot?.orderBook ?? EMPTY_ORDER_BOOK,
   );
@@ -32,16 +36,18 @@ export function DomTable() {
     ...bids.map((level) => level.bidSize),
   );
 
-  return (
-    <section className="flex min-h-[320px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/20 lg:h-full lg:min-h-0">
-      <div className="border-b border-white/10 bg-[#0B0E14]/70 px-2.5 py-2">
-        <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#E5E7EB]">
-          DOM
-        </h2>
-        <p className="mt-0.5 text-[10px] text-[#6B7280]">
-          Binance BTCUSDT depth20
-        </p>
-      </div>
+  const content = (
+    <>
+      {framed && (
+        <div className="border-b border-white/10 bg-[#0B0E14]/70 px-2.5 py-2">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#E5E7EB]">
+            DOM
+          </h2>
+          <p className="mt-0.5 text-[10px] text-[#6B7280]">
+            Binance BTCUSDT depth20
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-[1fr_1fr_1fr] border-b border-white/10 bg-[#0B0E14] px-2 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-[#6B7280]">
         <span>Precio</span>
@@ -78,6 +84,16 @@ export function DomTable() {
           </div>
         )}
       </div>
+    </>
+  );
+
+  if (!framed) {
+    return <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{content}</div>;
+  }
+
+  return (
+    <section className="flex min-h-[320px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/20 lg:h-full lg:min-h-0">
+      {content}
     </section>
   );
 }

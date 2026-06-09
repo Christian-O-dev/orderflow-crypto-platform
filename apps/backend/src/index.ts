@@ -1,11 +1,18 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
+import { resolve } from "node:path";
 import { Database } from "./database/index.js";
 import { createRealtimeServer } from "./realtime/socketServer.js";
 
-dotenv.config();
+const envPath = [
+  resolve(process.cwd(), ".env"),
+  resolve(process.cwd(), "../../.env"),
+].find((candidate) => existsSync(candidate));
+
+dotenv.config(envPath ? { path: envPath } : undefined);
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);

@@ -884,3 +884,915 @@ Diseño oscuro profesional
 ya sería un proyecto fuerte.
 
 Primero construye una terminal pequeña, estable y bonita. Después la conviertes en plataforma.
+
+Hasta aqui todo hecho...
+
+---
+
+
+# Continuación del Roadmap — Funciones Premium de Order Flow
+
+Esta continuación empieza después de tener terminado el MVP base:
+
+```txt
+BTCUSDT en vivo
+Tape real
+DOM básico
+PriceChart
+CvdChart
+Alertas simples
+UI dark profesional
+```
+
+El objetivo de esta nueva etapa es evolucionar el proyecto hacia una terminal más profesional, inspirada en herramientas premium de análisis de liquidez, pero usando datos públicos y lógica propia.
+
+---
+
+# Fase 11 — Large Trades Pro
+
+## Objetivo
+
+Mejorar el detector actual de trades grandes para convertirlo en un indicador profesional tipo `Large Trades`.
+
+Este indicador no mira órdenes pendientes. Mira operaciones reales ya ejecutadas en el mercado.
+
+```txt
+Large Trade = compra o venta ejecutada con valor alto en USD
+```
+
+---
+
+## Concepto técnico
+
+Actualmente el sistema puede detectar trades grandes por cantidad en BTC. La mejora es calcular el valor real en dólares:
+
+```txt
+notionalUsd = price * quantity
+```
+
+Ejemplo:
+
+```txt
+BTCUSDT price = 80,000
+quantity = 2 BTC
+
+notionalUsd = 160,000 USDT
+```
+
+---
+
+## Nuevos umbrales recomendados
+
+```txt
+Medium Large Trade: >= 100,000 USDT
+High Large Trade:   >= 500,000 USDT
+Whale Trade:        >= 1,000,000 USDT
+```
+
+Estos valores deben ser configurables con variables de entorno.
+
+---
+
+## Variables de entorno
+
+```env
+LARGE_TRADE_MEDIUM_USD=100000
+LARGE_TRADE_HIGH_USD=500000
+LARGE_TRADE_WHALE_USD=1000000
+```
+
+---
+
+## Tipo compartido recomendado
+
+Agregar en `packages/shared/src/index.ts`:
+
+```ts
+export type LargeTradeEvent = {
+  id: string;
+  exchange: Exchange;
+  symbol: MarketSymbol;
+  side: "buy" | "sell";
+  price: number;
+  quantity: number;
+  notionalUsd: number;
+  severity: "medium" | "high" | "whale";
+  timestamp: number;
+};
+```
+
+---
+
+## Backend — Tareas
+
+* Modificar `SignalEngine`.
+* Calcular `notionalUsd = trade.price * trade.quantity`.
+* Detectar large trades usando valor en USD, no solo cantidad en BTC.
+* Crear evento Socket.io:
+
+```txt
+market:large_trade
+```
+
+* Emitir un `LargeTradeEvent` cuando se supere un umbral.
+* Mantener también las alertas existentes.
+* No tocar todavía el DOM.
+* No cambiar todavía el conector de Binance.
+* No añadir base de datos en esta fase.
+
+---
+
+## Frontend — Tareas
+
+* Agregar `largeTrades` al Zustand store.
+* Guardar máximo 100 large trades recientes.
+* Crear componente:
+
+```txt
+LargeTradesPanel.tsx
+```
+
+* Mostrar columnas:
+
+```txt
+Hora
+Lado
+Precio
+Cantidad BTC
+Valor USD
+Severidad
+Exchange
+```
+
+* Colores recomendados:
+
+```txt
+Buy  -> verde
+Sell -> rojo
+Whale -> amarillo / naranja
+```
+
+---
+
+## Criterios de aceptación
+
+La fase se considera terminada cuando:
+
+```txt
+npm run typecheck pasa
+npm run build pasa
+El backend detecta trades por valor USD
+El frontend muestra LargeTradesPanel
+Las alertas actuales siguen funcionando
+El Tape sigue funcionando
+El DOM sigue funcionando
+No se rompe PriceChart ni CvdChart
+```
+
+---
+
+## Prompt para Codex
+
+```txt
+Quiero agregar un indicador Large Trades profesional sin romper el MVP actual.
+
+Contexto:
+- El proyecto ya tiene SignalEngine con large_trade.
+- El backend recibe trades reales de Binance.
+- El frontend tiene TapeTable, AlertsPanel, PriceChart, CvdChart y Zustand store.
+- Actualmente los trades grandes se detectan por cantidad BTC.
+- Quiero detectarlos por valor USD usando notionalUsd = price * quantity.
+
+Objetivo:
+1. Crear tipo LargeTradeEvent en packages/shared/src/index.ts.
+2. Agregar evento socket "market:large_trade" en SOCKET_EVENTS.
+3. Calcular notionalUsd en backend.
+4. Agregar variables:
+   - LARGE_TRADE_MEDIUM_USD=100000
+   - LARGE_TRADE_HIGH_USD=500000
+   - LARGE_TRADE_WHALE_USD=1000000
+5. Emitir LargeTradeEvent desde SignalEngine.
+6. Guardar últimos 100 large trades en Zustand store.
+7. Crear componente LargeTradesPanel.
+8. Mostrar hora, lado, precio, cantidad, valor USD, severidad y exchange.
+9. No tocar DOM todavía.
+10. No tocar base de datos todavía.
+11. No modificar conectores Binance.
+12. Mantener Tape, PriceChart y CvdChart funcionando.
+
+Criterios:
+- npm run typecheck pasa.
+- npm run build pasa.
+- El panel muestra large trades cuando superan el umbral.
+- Las alertas existentes siguen funcionando.
+```
+
+---
+
+# Fase 12 — Whale Orders Básico con DOM Actual
+
+## Objetivo
+
+Agregar un panel `Whale Orders` usando el DOM actual del MVP.
+
+Esta primera versión será limitada porque el MVP usa profundidad reducida del libro de órdenes. Aun así, sirve para crear una demo visual y empezar a detectar grandes muros de liquidez.
+
+---
+
+## Concepto técnico
+
+Un `Whale Order` en esta fase será un nivel grande de liquidez pendiente en el libro de órdenes.
+
+```txt
+Whale Order = nivel bid/ask con notionalUsd alto
+```
+
+Cálculo:
+
+```txt
+notionalUsd = price * size
+```
+
+Ejemplo:
+
+```txt
+price = 80,000
+size = 25 BTC
+
+notionalUsd = 2,000,000 USDT
+```
+
+---
+
+## Importante
+
+No afirmar que es una ballena real.
+
+Usar nombres prudentes:
+
+```txt
+Whale Liquidity
+Liquidity Wall
+Large Limit Order
+Muro de liquidez
+```
+
+Evitar:
+
+```txt
+Manipulación confirmada
+Ballena confirmada
+Entrada segura
+```
+
+---
+
+## Umbral inicial recomendado
+
+```env
+WHALE_ORDER_THRESHOLD_USD=1000000
+```
+
+---
+
+## Tipo compartido recomendado
+
+Agregar en `packages/shared/src/index.ts`:
+
+```ts
+export type WhaleLiquidityLevel = {
+  id: string;
+  exchange: Exchange;
+  symbol: MarketSymbol;
+  side: "bid" | "ask";
+  price: number;
+  quantity: number;
+  notionalUsd: number;
+  firstSeen: number;
+  lastSeen: number;
+  durationMs: number;
+  status: "active" | "cancelled" | "partially_removed";
+};
+```
+
+---
+
+## Backend — Tareas
+
+* Crear un nuevo módulo:
+
+```txt
+apps/backend/src/whale-engine/WhaleOrderEngine.ts
+```
+
+* Recibir el `orderBook` actual.
+* Revisar cada nivel bid/ask.
+* Calcular `notionalUsd`.
+* Detectar niveles mayores al umbral.
+* Guardar en memoria:
+
+  * precio;
+  * lado;
+  * cantidad;
+  * valor USD;
+  * primera vez visto;
+  * última vez visto;
+  * duración.
+* Detectar si un muro desaparece.
+* Marcarlo como `cancelled` o `partially_removed`.
+* Emitir evento Socket.io:
+
+```txt
+market:whale_orders
+```
+
+---
+
+## Frontend — Tareas
+
+* Agregar `whaleOrders` al Zustand store.
+* Crear componente:
+
+```txt
+WhaleOrdersPanel.tsx
+```
+
+* Crear toggle de vista:
+
+```txt
+[DOM] [Whale Orders]
+```
+
+* Mostrar columnas:
+
+```txt
+Side
+Price
+Quantity
+Value USD
+Duration
+Status
+```
+
+* Mostrar aviso:
+
+```txt
+Versión limitada a Binance depth20.
+```
+
+---
+
+## Criterios de aceptación
+
+La fase se considera terminada cuando:
+
+```txt
+npm run typecheck pasa
+npm run build pasa
+El DOM clásico sigue funcionando
+Existe vista Whale Orders
+Se detectan muros grandes dentro del DOM actual
+Se marca si un muro desaparece
+No se cambia todavía a order book profundo
+No se envían miles de niveles al frontend
+```
+
+---
+
+## Prompt para Codex
+
+```txt
+Quiero agregar un panel Whale Orders básico usando el DOM actual depth20 del MVP.
+
+Contexto:
+- El backend ya recibe orderBook desde BinanceDepthConnector.
+- El DOM actual solo tiene top 20 niveles.
+- Quiero una primera versión limitada para detectar muros grandes dentro de esos 20 niveles.
+- No quiero cambiar todavía a diff depth stream profundo.
+- No quiero copiar Coinglass, quiero una implementación propia.
+
+Objetivo:
+1. Crear tipo WhaleLiquidityLevel en packages/shared/src/index.ts.
+2. Agregar evento socket "market:whale_orders" en SOCKET_EVENTS.
+3. Crear WhaleOrderEngine en backend.
+4. Detectar niveles donde:
+   notionalUsd = price * size >= WHALE_ORDER_THRESHOLD_USD.
+5. Umbral inicial:
+   WHALE_ORDER_THRESHOLD_USD=1000000.
+6. Cada whale level debe tener:
+   - id
+   - exchange
+   - symbol
+   - side bid/ask
+   - price
+   - quantity
+   - notionalUsd
+   - firstSeen
+   - lastSeen
+   - durationMs
+   - status active/cancelled/partially_removed
+7. Emitir evento socket "market:whale_orders".
+8. Guardar últimos whale orders en Zustand store.
+9. Crear componente WhaleOrdersPanel.
+10. Añadir toggle en UI:
+   [DOM] [Whale Orders]
+11. Mostrar aviso:
+   "Versión limitada a Binance depth20".
+12. No cambiar el conector de profundidad todavía.
+
+Criterios:
+- npm run typecheck pasa.
+- npm run build pasa.
+- DOM actual sigue funcionando.
+- WhaleOrdersPanel muestra niveles grandes si aparecen.
+```
+
+---
+
+# Fase 13 — Order Book Profundo para Whale Orders Real
+
+## Objetivo
+
+Evolucionar el sistema de `Whale Orders` para detectar liquidez más alejada del precio actual.
+
+La versión anterior usa solo el DOM reducido. Esta fase construye un order book local profundo usando snapshot inicial y actualizaciones diferenciales.
+
+---
+
+## Problema que resuelve
+
+El DOM básico solo muestra pocos niveles cercanos al precio.
+
+Para detectar muros como:
+
+```txt
+Bid wall lejos del precio
+Ask wall lejos del precio
+Liquidez acumulada por zonas
+Órdenes grandes que aparecen y desaparecen
+```
+
+se necesita un libro de órdenes más profundo.
+
+---
+
+## Nuevo enfoque
+
+Crear un conector especializado:
+
+```txt
+BinanceDeepOrderBookConnector
+```
+
+Responsabilidades:
+
+```txt
+1. Obtener snapshot REST inicial.
+2. Conectarse a diff depth stream.
+3. Sincronizar snapshot + updates.
+4. Mantener bids y asks en memoria.
+5. Detectar pérdida de secuencia.
+6. Resincronizar si hay error.
+7. Enviar al frontend solo información útil.
+```
+
+---
+
+## Arquitectura recomendada
+
+```txt
+BinanceDeepOrderBookConnector
+        ↓
+DeepOrderBookEngine
+        ↓
+WhaleOrderEngine
+        ↓
+Socket.io
+        ↓
+Frontend
+```
+
+---
+
+## Regla importante de rendimiento
+
+No enviar el order book completo al frontend.
+
+Enviar solo:
+
+```txt
+Top 20 niveles -> DomTable
+Whale levels -> WhaleOrdersPanel
+Liquidity bands -> PriceChart overlay futuro
+```
+
+---
+
+## Backend — Tareas
+
+* Crear:
+
+```txt
+apps/backend/src/exchanges/binance/BinanceDeepOrderBookConnector.ts
+```
+
+* Crear:
+
+```txt
+apps/backend/src/market-engine/DeepOrderBookEngine.ts
+```
+
+* Mantener estructuras:
+
+```ts
+private bids = new Map<number, number>();
+private asks = new Map<number, number>();
+```
+
+* Crear método para obtener top 20 niveles.
+* Crear método para obtener niveles con notional alto.
+* Reemplazar gradualmente el uso de `depth20` para Whale Orders.
+* Mantener `depth20` como fallback si el order book profundo falla.
+
+---
+
+## Frontend — Tareas
+
+* No cambiar mucho el frontend.
+* `DomTable` debe seguir recibiendo top 20.
+* `WhaleOrdersPanel` debe empezar a recibir niveles más profundos.
+* Mostrar etiqueta:
+
+```txt
+Deep Order Book activo
+```
+
+o
+
+```txt
+Fallback depth20 activo
+```
+
+---
+
+## Criterios de aceptación
+
+La fase se considera terminada cuando:
+
+```txt
+npm run typecheck pasa
+npm run build pasa
+El backend mantiene order book profundo
+El DOM sigue mostrando top 20
+WhaleOrdersPanel detecta liquidez más alejada
+No se satura Socket.io
+No se envían miles de niveles al frontend
+El sistema se resincroniza si pierde secuencia
+Existe fallback si falla el deep order book
+```
+
+---
+
+## Riesgos técnicos
+
+```txt
+Pérdida de secuencia en updates
+Reconexiones frecuentes
+Demasiados niveles en memoria
+Enviar demasiados datos al frontend
+Falsos positivos en muros de liquidez
+```
+
+---
+
+## Prompt para Codex
+
+```txt
+Quiero evolucionar Whale Orders usando un order book profundo de Binance.
+
+Contexto:
+- Ya existe DOM básico con depth20.
+- Ya existe o existirá WhaleOrderEngine.
+- No quiero enviar miles de niveles al frontend.
+- Quiero construir un order book local profundo correctamente.
+- El DOM clásico debe seguir funcionando.
+
+Objetivo:
+1. Crear BinanceDeepOrderBookConnector.
+2. Usar stream btcusdt@depth@100ms.
+3. Obtener snapshot REST inicial de Binance para BTCUSDT.
+4. Seguir el procedimiento correcto de snapshot + diff depth.
+5. Mantener order book local con Map<number, number> para bids y asks.
+6. Detectar pérdida de secuencia y resincronizar.
+7. Emitir solo:
+   - top 20 niveles para DomTable
+   - whale levels detectados para WhaleOrdersPanel
+8. No enviar los niveles completos al frontend.
+9. Mantener fallback al depth20 si falla.
+10. No modificar PriceChart todavía.
+
+Criterios:
+- npm run typecheck pasa.
+- npm run build pasa.
+- DOM sigue mostrando top 20.
+- WhaleOrdersPanel puede detectar liquidez más alejada.
+- Socket.io no se satura.
+- El código queda separado y mantenible.
+```
+
+---
+
+# Fase 14 — Overlay Visual de Whale Orders y Large Trades en el Gráfico
+
+## Objetivo
+
+Mostrar visualmente en el PriceChart las zonas de liquidez grande y los trades ejecutados importantes.
+
+Esta fase convierte los datos premium-style en una experiencia visual parecida a una terminal profesional.
+
+---
+
+## Elementos visuales
+
+### Whale Orders
+
+Representar como bandas horizontales:
+
+```txt
+Ask wall -> banda roja arriba del precio
+Bid wall -> banda verde debajo del precio
+Cancelled wall -> banda atenuada o punteada
+```
+
+### Large Trades
+
+Representar como marcadores:
+
+```txt
+Large buy -> marcador verde
+Large sell -> marcador rojo
+Whale trade -> marcador amarillo/naranja
+```
+
+---
+
+## Importante
+
+No intentar copiar exactamente la interfaz de Coinglass.
+
+El objetivo es crear una visualización propia:
+
+```txt
+Order Flow Liquidity Overlay
+```
+
+---
+
+## Tipo recomendado para overlay
+
+Agregar en `packages/shared/src/index.ts`:
+
+```ts
+export type ChartLiquidityBand = {
+  id: string;
+  side: "bid" | "ask";
+  price: number;
+  notionalUsd: number;
+  startTime: number;
+  endTime?: number;
+  status: "active" | "cancelled" | "partially_removed";
+};
+
+export type ChartTradeMarker = {
+  id: string;
+  side: "buy" | "sell";
+  price: number;
+  notionalUsd: number;
+  timestamp: number;
+  severity: "medium" | "high" | "whale";
+};
+```
+
+---
+
+## Frontend — Tareas
+
+* Modificar `PriceChart`.
+* Recibir `whaleOrders`.
+* Recibir `largeTrades`.
+* Dibujar bandas horizontales o líneas de precio para niveles grandes.
+* Dibujar marcadores para large trades.
+* Agregar toggles:
+
+```txt
+Show Whale Orders
+Show Cancelled Orders
+Show Large Trades
+```
+
+* Permitir activar/desactivar overlays sin afectar el gráfico base.
+* Mantener rendimiento aceptable.
+
+---
+
+## Backend — Tareas
+
+* Preparar datos limpios para el overlay.
+* No enviar eventos duplicados innecesarios.
+* No enviar order book completo.
+* Enviar solo:
+
+  * bandas activas;
+  * bandas canceladas recientes;
+  * large trades recientes.
+
+---
+
+## UI recomendada
+
+```txt
+┌──────────────────────────────────────────────────────────────┐
+│ BTCUSDT | 30m | Whale Orders ON | Cancelled ON | Large ON    │
+├───────────────┬───────────────────────────────┬──────────────┤
+│ DOM / Whales  │ PriceChart + Liquidity Overlay│ Large Trades │
+│               │                               │ Tape         │
+└───────────────┴───────────────────────────────┴──────────────┘
+```
+
+---
+
+## Criterios de aceptación
+
+La fase se considera terminada cuando:
+
+```txt
+npm run typecheck pasa
+npm run build pasa
+PriceChart sigue funcionando aunque no haya overlays
+Se pueden activar/desactivar Whale Orders
+Se pueden activar/desactivar Cancelled Orders
+Se pueden activar/desactivar Large Trades
+Los large trades aparecen como marcadores
+Los whale orders aparecen como zonas o líneas
+El gráfico no se congela
+El DOM y Tape siguen funcionando
+```
+
+---
+
+## Riesgos técnicos
+
+```txt
+Demasiados overlays pueden congelar el gráfico
+Lightweight Charts puede limitar ciertos dibujos avanzados
+Puede ser necesario crear un Canvas overlay propio
+Las bandas deben limpiarse cuando ya no son relevantes
+```
+
+---
+
+## Decisión técnica recomendada
+
+Primera versión:
+
+```txt
+Usar price lines o markers de Lightweight Charts
+```
+
+Versión avanzada:
+
+```txt
+Crear Canvas overlay encima del PriceChart
+```
+
+---
+
+## Prompt para Codex
+
+```txt
+Quiero agregar overlays visuales de Whale Orders y Large Trades en PriceChart.
+
+Contexto:
+- El proyecto usa Lightweight Charts.
+- Ya existe PriceChart.
+- Ya existe o existirá LargeTradesPanel.
+- Ya existe o existirá WhaleOrdersPanel.
+- No quiero copiar Coinglass, quiero una visualización propia.
+- El gráfico base debe seguir funcionando aunque no haya overlays.
+
+Objetivo:
+1. Crear tipos ChartLiquidityBand y ChartTradeMarker en packages/shared/src/index.ts.
+2. Preparar datos de overlay desde largeTrades y whaleOrders.
+3. Agregar toggles en UI:
+   - Show Whale Orders
+   - Show Cancelled Orders
+   - Show Large Trades
+4. Modificar PriceChart para mostrar:
+   - líneas o bandas para whale orders
+   - markers para large trades
+5. No recrear el chart en cada render.
+6. Limpiar overlays antiguos correctamente.
+7. Mantener rendimiento aceptable.
+8. No tocar conectores Binance en esta fase.
+9. No cambiar base de datos.
+
+Criterios:
+- npm run typecheck pasa.
+- npm run build pasa.
+- PriceChart funciona con overlays activos y desactivados.
+- DOM y Tape siguen funcionando.
+- El usuario puede activar o desactivar cada overlay.
+```
+
+---
+
+# Resumen de la continuación
+
+```txt
+Fase 11 -> Large Trades Pro
+Fase 12 -> Whale Orders básico con DOM actual
+Fase 13 -> Order Book profundo para Whale Orders real
+Fase 14 -> Overlay visual en PriceChart
+```
+
+---
+
+# Orden obligatorio de implementación
+
+No saltarse fases.
+
+```txt
+1. Large Trades Pro
+2. Whale Orders básico
+3. Deep Order Book
+4. Overlay visual
+```
+
+Motivo:
+
+```txt
+Large Trades usa datos que ya tienes.
+Whale Orders básico usa el DOM actual.
+Deep Order Book aumenta precisión.
+Overlay visual solo tiene sentido cuando los datos ya son estables.
+```
+
+---
+
+# Definición final de esta etapa terminada
+
+Esta etapa se considera terminada cuando la plataforma tenga:
+
+```txt
+LargeTradesPanel funcionando
+WhaleOrdersPanel funcionando
+DOM clásico conservado
+Deep Order Book activo o fallback estable
+PriceChart con overlays activables
+Alertas prudentes y no exageradas
+Código modular
+Build estable
+README actualizado
+```
+
+---
+
+# Reglas de producto
+
+No prometer detección perfecta de manipulación.
+
+Usar frases como:
+
+```txt
+Posible liquidez institucional
+Muro de liquidez detectado
+Liquidez retirada
+Large trade ejecutado
+Desequilibrio probable
+```
+
+Evitar frases como:
+
+```txt
+Manipulación confirmada
+Ballena confirmada
+Compra segura
+Venta segura
+Señal infalible
+```
+
+---
+
+# Próximas funciones después de esta etapa
+
+Cuando estas 4 fases estén completas, se puede avanzar a:
+
+```txt
+Heatmap histórico de liquidez
+Footprint chart
+Volume Profile
+Replay de mercado
+Diario de trading
+IA de resumen de mercado
+Multi-exchange
+```
