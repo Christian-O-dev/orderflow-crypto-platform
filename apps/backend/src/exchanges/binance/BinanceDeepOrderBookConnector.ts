@@ -1,5 +1,6 @@
 import WebSocket from "ws";
 import type { OrderBookLevel } from "../../types/market.js";
+import { MARKET_CONFIG } from "../../config/marketConfig.js";
 
 type BinanceDeepOrderBookConnectorOptions = {
   onDepth: (update: BinanceDeepOrderBookUpdate) => void;
@@ -40,11 +41,7 @@ const BINANCE_BTCUSDT_DEEP_DEPTH_URL =
   "wss://stream.binance.com:9443/ws/btcusdt@depth@100ms";
 const BINANCE_BTCUSDT_DEPTH_SNAPSHOT_URL =
   "https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=5000";
-const RECONNECT_DELAY_MS = 2_500;
-const RESYNC_DELAY_MS = 1_000;
-const SNAPSHOT_TIMEOUT_MS = 5_000;
-const MAX_BUFFERED_EVENTS = 1_000;
-const TOP_LEVELS = 20;
+const { binance } = MARKET_CONFIG;
 
 export class BinanceDeepOrderBookConnector {
   private ws: WebSocket | null = null;
@@ -188,7 +185,7 @@ export class BinanceDeepOrderBookConnector {
     const abortController = new AbortController();
     const timeout = setTimeout(() => {
       abortController.abort();
-    }, SNAPSHOT_TIMEOUT_MS);
+    }, binance.snapshotTimeoutMs);
 
     try {
       const response = await fetch(BINANCE_BTCUSDT_DEPTH_SNAPSHOT_URL, {
@@ -235,8 +232,8 @@ export class BinanceDeepOrderBookConnector {
 
   private emitDepth(eventTime: number) {
     this.options.onDepth({
-      topLevels: this.orderBook.getTopLevels(TOP_LEVELS),
-      deepLevels: this.orderBook.getLevels(),
+      topLevels: this.orderBook.getTopLevels(binance.topLevels),
+      deepLevels: this.orderBook.getLevels(binance.maxDeepLevels),
       updateId: this.orderBook.updateId,
       eventTime,
     });
@@ -245,7 +242,7 @@ export class BinanceDeepOrderBookConnector {
   private bufferEvent(event: BinanceDepthDiffMessage) {
     this.bufferedEvents.push(event);
 
-    if (this.bufferedEvents.length <= MAX_BUFFERED_EVENTS) {
+    if (this.bufferedEvents.length <= binance.maxBufferedDepthEvents) {
       return;
     }
 
@@ -264,7 +261,7 @@ export class BinanceDeepOrderBookConnector {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
-    }, RECONNECT_DELAY_MS);
+    }, binance.reconnectDelayMs);
 
     this.reconnectTimer.unref();
   }
@@ -277,7 +274,7 @@ export class BinanceDeepOrderBookConnector {
     this.resyncTimer = setTimeout(() => {
       this.resyncTimer = null;
       void this.syncFromSnapshot();
-    }, RESYNC_DELAY_MS);
+    }, binance.deepResyncDelayMs);
 
     this.resyncTimer.unref();
   }
@@ -327,8 +324,11 @@ class BinanceLocalOrderBook {
     );
   }
 
-  getLevels() {
-    return mergeSides(getSortedLevels(this.bids, "bid"), getSortedLevels(this.asks, "ask"));
+  getLevels(maxLevelsPerSide: number) {
+    return mergeSides(
+      getSortedLevels(this.bids, "bid").slice(0, maxLevelsPerSide),
+      getSortedLevels(this.asks, "ask").slice(0, maxLevelsPerSide),
+    );
   }
 }
 

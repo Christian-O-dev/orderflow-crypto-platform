@@ -1,5 +1,6 @@
 import WebSocket from "ws";
 import type { OrderBookLevel } from "../../types/market.js";
+import { MARKET_CONFIG } from "../../config/marketConfig.js";
 
 type BinanceDepthConnectorOptions = {
   onDepth: (levels: OrderBookLevel[]) => void;
@@ -20,14 +21,14 @@ type BinanceDepthMessage = {
 
 const BINANCE_BTCUSDT_DEPTH_URL =
   "wss://stream.binance.com:9443/ws/btcusdt@depth20@100ms";
-const RECONNECT_DELAY_MS = 2_500;
-const MAX_LEVELS = 20;
 
 export class BinanceDepthConnector {
   private ws: WebSocket | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private shouldReconnect = true;
-  private readonly orderBook = new BinanceTopOrderBook(MAX_LEVELS);
+  private readonly orderBook = new BinanceTopOrderBook(
+    MARKET_CONFIG.binance.depthFallbackLevels,
+  );
 
   constructor(private readonly options: BinanceDepthConnectorOptions) {}
 
@@ -92,7 +93,7 @@ export class BinanceDepthConnector {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
-    }, RECONNECT_DELAY_MS);
+    }, MARKET_CONFIG.binance.reconnectDelayMs);
 
     this.reconnectTimer.unref();
   }

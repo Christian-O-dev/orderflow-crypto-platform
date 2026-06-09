@@ -23,6 +23,7 @@ export function LargeTradesPanel() {
   const largeTrades = useMarketStore(
     (state) => state.largeTrades ?? EMPTY_LARGE_TRADES,
   );
+  const analysisWindow = useMarketStore((state) => state.analysisWindow);
 
   return (
     <section className="flex min-h-[220px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/20 lg:h-full lg:min-h-0">
@@ -33,7 +34,7 @@ export function LargeTradesPanel() {
               Large Trades
             </h2>
             <p className="mt-0.5 text-[10px] text-[#6B7280]">
-              Ejecutados por valor USD
+              Large Trades por ventana - {analysisWindow}
             </p>
           </div>
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-[#9CA3AF]">

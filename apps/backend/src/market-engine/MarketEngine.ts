@@ -5,11 +5,10 @@ import type {
   OrderBookLevel,
   PricePoint,
 } from "../types/market.js";
+import { MARKET_CONFIG } from "../config/marketConfig.js";
 
 const MAX_TRADES = 150;
 const MAX_POINTS = 500;
-const SYMBOL = "BTCUSDT";
-const EXCHANGE = "binance";
 
 export class MarketEngine {
   private lastPrice = 0;
@@ -60,8 +59,8 @@ export class MarketEngine {
     }
 
     return {
-      symbol: SYMBOL,
-      exchange: EXCHANGE,
+      symbol: MARKET_CONFIG.symbol,
+      exchange: MARKET_CONFIG.exchange,
       lastPrice: this.lastPrice,
       cvd: this.cvd,
       buyVolume: this.buyVolume,

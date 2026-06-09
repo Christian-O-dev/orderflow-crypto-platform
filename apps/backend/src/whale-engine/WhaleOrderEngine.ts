@@ -1,27 +1,23 @@
 import type {
-  Exchange,
-  MarketSymbol,
   OrderBookLevel,
   WhaleLiquidityLevel,
 } from "../types/market.js";
-
-const DEFAULT_WHALE_ORDER_THRESHOLD_USD = 1_000_000;
-const EXCHANGE: Exchange = "binance";
-const SYMBOL: MarketSymbol = "BTCUSDT";
-const MAX_TRACKED_LEVELS = 100;
+import { MARKET_CONFIG } from "../config/marketConfig.js";
 
 type WhaleOrderEngineOptions = {
   thresholdUsd?: number;
+  maxTrackedLevels?: number;
 };
 
 export class WhaleOrderEngine {
   private readonly thresholdUsd: number;
+  private readonly maxTrackedLevels: number;
   private readonly levels = new Map<string, WhaleLiquidityLevel>();
 
   constructor(options: WhaleOrderEngineOptions = {}) {
-    this.thresholdUsd =
-      options.thresholdUsd ??
-      Number(process.env.WHALE_ORDER_THRESHOLD_USD ?? DEFAULT_WHALE_ORDER_THRESHOLD_USD);
+    this.thresholdUsd = options.thresholdUsd ?? MARKET_CONFIG.whaleOrders.thresholdUsd;
+    this.maxTrackedLevels =
+      options.maxTrackedLevels ?? MARKET_CONFIG.whaleOrders.maxTrackedLevels;
   }
 
   processOrderBook(orderBook: OrderBookLevel[], timestamp = Date.now()) {
@@ -100,8 +96,8 @@ export class WhaleOrderEngine {
       seenKeys.add(key);
       this.levels.set(key, {
         id: this.getLevelId(side, price),
-        exchange: EXCHANGE,
-        symbol: SYMBOL,
+        exchange: MARKET_CONFIG.exchange,
+        symbol: MARKET_CONFIG.symbol,
         side,
         price,
         quantity,
@@ -135,7 +131,7 @@ export class WhaleOrderEngine {
     );
 
     for (const [index, [key]] of levelsByRecency.entries()) {
-      if (index >= MAX_TRACKED_LEVELS) {
+      if (index >= this.maxTrackedLevels) {
         this.levels.delete(key);
       }
     }
@@ -146,6 +142,6 @@ export class WhaleOrderEngine {
   }
 
   private getLevelId(side: WhaleLiquidityLevel["side"], price: number) {
-    return `${EXCHANGE}-${SYMBOL}-${side}-${price.toFixed(2)}`;
+    return `${MARKET_CONFIG.exchange}-${MARKET_CONFIG.symbol}-${side}-${price.toFixed(2)}`;
   }
 }

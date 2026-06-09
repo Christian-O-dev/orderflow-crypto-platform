@@ -23,11 +23,12 @@ export function WhaleOrdersPanel() {
   const whaleOrders = useMarketStore(
     (state) => state.whaleOrders ?? EMPTY_WHALE_ORDERS,
   );
+  const analysisWindow = useMarketStore((state) => state.analysisWindow);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="border-b border-amber-300/15 bg-amber-300/[0.04] px-2.5 py-1.5 font-mono text-[9.5px] text-amber-100">
-        Order book profundo de Binance.
+        Whale Orders por ventana: {analysisWindow}. Order book profundo de Binance.
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">

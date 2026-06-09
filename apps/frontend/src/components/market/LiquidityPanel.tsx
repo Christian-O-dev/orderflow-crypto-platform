@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { useState } from "react";
 import { DomTable } from "./DomTable";
 import { WhaleOrdersPanel } from "./WhaleOrdersPanel";
+import { useMarketStore } from "../../stores/marketStore";
 
 type LiquidityView = "dom" | "whale_orders";
 
@@ -12,6 +13,7 @@ const views: Array<{ id: LiquidityView; label: string }> = [
 
 export function LiquidityPanel() {
   const [activeView, setActiveView] = useState<LiquidityView>("dom");
+  const analysisWindow = useMarketStore((state) => state.analysisWindow);
 
   return (
     <section className="flex min-h-[320px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/20 lg:h-full lg:min-h-0">
@@ -22,7 +24,9 @@ export function LiquidityPanel() {
               Liquidez
             </h2>
             <p className="mt-0.5 text-[10px] text-[#6B7280]">
-              Binance BTCUSDT depth20
+              {activeView === "dom"
+                ? "DOM actual - Binance BTCUSDT depth20"
+                : `Whale Orders por ventana - ${analysisWindow}`}
             </p>
           </div>
 

@@ -9,11 +9,10 @@ import { MockMarketEngine } from "../market-engine/MockMarketEngine.js";
 import { SignalEngine } from "../signal-engine/SignalEngine.js";
 import { WhaleOrderEngine } from "../whale-engine/WhaleOrderEngine.js";
 import type { Database } from "../database/index.js";
+import { MARKET_CONFIG } from "../config/marketConfig.js";
 
-const SNAPSHOT_INTERVAL_MS = 250;
-const PERSISTENCE_INTERVAL_MS = 1_000;
-const FALLBACK_AFTER_MS = 5_000;
 const VITE_DEV_ORIGINS = [/^http:\/\/localhost:517\d+$/, /^http:\/\/127\.0\.0\.1:517\d+$/];
+const { realtime } = MARKET_CONFIG;
 
 type RealtimeServerOptions = {
   database?: Database;
@@ -37,11 +36,17 @@ export function createRealtimeServer(
   let useDepthFallback = false;
   let lastRealTradeAt = Date.now();
   let lastPersistedAt = 0;
+  let lastWhaleOrdersEmittedAt = 0;
+  let lastWhaleOrdersSignature = "";
+  let largeTradesEmittedSinceLog = 0;
   let latestWhaleOrders = whaleOrderEngine.getLevels();
 
   io.on("connection", (socket) => {
     socket.emit(SOCKET_EVENTS.MARKET_SNAPSHOT, getCurrentSnapshot());
-    socket.emit(SOCKET_EVENTS.MARKET_WHALE_ORDERS, latestWhaleOrders);
+    socket.emit(
+      SOCKET_EVENTS.MARKET_WHALE_ORDERS,
+      latestWhaleOrders.slice(0, MARKET_CONFIG.frontendLimits.maxWhaleOrders),
+    );
   });
 
   signalEngine.onAlert((alert) => {
@@ -50,6 +55,7 @@ export function createRealtimeServer(
   });
 
   signalEngine.onLargeTrade((largeTrade) => {
+    largeTradesEmittedSinceLog += 1;
     io.emit(SOCKET_EVENTS.MARKET_LARGE_TRADE, largeTrade);
   });
 
@@ -61,7 +67,7 @@ export function createRealtimeServer(
       signalEngine.processTrade(trade, marketEngine.getCvd());
     },
     onStatusChange: (status) => {
-      console.log(`Binance trades ${status}`);
+      logStatusChange("Binance trades", status);
     },
     onError: (error) => {
       useMockFallback = true;
@@ -79,7 +85,7 @@ export function createRealtimeServer(
       latestWhaleOrders = whaleOrderEngine.processOrderBook(orderBook);
     },
     onStatusChange: (status) => {
-      console.log(`Binance depth20 fallback ${status}`);
+      logStatusChange("Binance depth20 fallback", status);
     },
     onError: (error) => {
       console.error(`Binance depth20 fallback error: ${error.message}`);
@@ -93,7 +99,7 @@ export function createRealtimeServer(
       latestWhaleOrders = whaleOrderEngine.processOrderBook(deepLevels, eventTime);
     },
     onStatusChange: (status) => {
-      console.log(`Binance deep depth ${status}`);
+      logStatusChange("Binance deep depth", status);
     },
     onError: (error) => {
       console.error(`Binance deep depth error: ${error.message}`);
@@ -110,15 +116,34 @@ export function createRealtimeServer(
     const snapshot = getCurrentSnapshot();
 
     io.emit(SOCKET_EVENTS.MARKET_SNAPSHOT, snapshot);
-    io.emit(SOCKET_EVENTS.MARKET_WHALE_ORDERS, latestWhaleOrders);
+    emitWhaleOrdersIfNeeded();
 
-    if (Date.now() - lastPersistedAt >= PERSISTENCE_INTERVAL_MS) {
+    if (Date.now() - lastPersistedAt >= realtime.persistenceIntervalMs) {
       lastPersistedAt = Date.now();
       void options.database?.saveMarketTick(snapshot);
     }
-  }, SNAPSHOT_INTERVAL_MS);
+  }, realtime.snapshotIntervalMs);
 
   interval.unref();
+
+  const statsInterval = setInterval(() => {
+    const activeWhaleOrders = latestWhaleOrders.filter(
+      (level) => level.status === "active",
+    ).length;
+
+    console.log(
+      [
+        "Market stats",
+        `clients=${io.engine.clientsCount}`,
+        `fallback=${useMockFallback ? "mock" : useDepthFallback ? "depth20" : "live"}`,
+        `whales=${activeWhaleOrders}/${latestWhaleOrders.length}`,
+        `largeTrades=${largeTradesEmittedSinceLog}`,
+      ].join(" "),
+    );
+    largeTradesEmittedSinceLog = 0;
+  }, realtime.statsLogIntervalMs);
+
+  statsInterval.unref();
 
   return io;
 
@@ -128,6 +153,7 @@ export function createRealtimeServer(
     }
 
     useDepthFallback = true;
+    console.warn("Starting Binance depth20 fallback after deep depth issue");
     binanceDepthConnector.connect();
   }
 
@@ -137,12 +163,13 @@ export function createRealtimeServer(
     }
 
     useDepthFallback = false;
+    console.log("Stopping Binance depth20 fallback; deep depth recovered");
     binanceDepthConnector.close();
   }
 
   function getCurrentSnapshot() {
     const hasTimedOutWaitingForRealTrades =
-      !marketEngine.hasTrades() && Date.now() - lastRealTradeAt > FALLBACK_AFTER_MS;
+      !marketEngine.hasTrades() && Date.now() - lastRealTradeAt > realtime.fallbackAfterMs;
 
     if (useMockFallback || hasTimedOutWaitingForRealTrades) {
       if (!useMockFallback) {
@@ -160,4 +187,50 @@ export function createRealtimeServer(
 
     return marketEngine.getSnapshot();
   }
+
+  function emitWhaleOrdersIfNeeded() {
+    const now = Date.now();
+    const signature = createWhaleOrdersSignature(latestWhaleOrders);
+    const signatureChanged = signature !== lastWhaleOrdersSignature;
+    const shouldRefreshDurations =
+      now - lastWhaleOrdersEmittedAt >= realtime.whaleOrdersEmitIntervalMs;
+
+    if (!signatureChanged && !shouldRefreshDurations) {
+      return;
+    }
+
+    lastWhaleOrdersSignature = signature;
+    lastWhaleOrdersEmittedAt = now;
+    io.emit(
+      SOCKET_EVENTS.MARKET_WHALE_ORDERS,
+      latestWhaleOrders.slice(0, MARKET_CONFIG.frontendLimits.maxWhaleOrders),
+    );
+  }
+}
+
+const lastStatusByLabel = new Map<string, string>();
+
+function logStatusChange(label: string, status: string) {
+  if (lastStatusByLabel.get(label) === status) {
+    return;
+  }
+
+  lastStatusByLabel.set(label, status);
+  console.log(`${label} ${status}`);
+}
+
+function createWhaleOrdersSignature(
+  whaleOrders: ReturnType<WhaleOrderEngine["getLevels"]>,
+) {
+  return whaleOrders
+    .slice(0, MARKET_CONFIG.frontendLimits.maxWhaleOrders)
+    .map((level) =>
+      [
+        level.id,
+        level.status,
+        level.quantity.toFixed(8),
+        Math.round(level.notionalUsd),
+      ].join(":"),
+    )
+    .join("|");
 }

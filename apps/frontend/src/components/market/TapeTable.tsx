@@ -32,7 +32,7 @@ export function TapeTable() {
               Tape
             </h2>
             <p className="mt-0.5 text-[10px] text-[#6B7280]">
-              Time & Sales - {MAX_VISIBLE_TRADES}
+              Tape raw - Time & Sales - {MAX_VISIBLE_TRADES}
             </p>
           </div>
 

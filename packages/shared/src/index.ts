@@ -1,6 +1,24 @@
 export type Exchange = "binance";
 export type MarketSymbol = "BTCUSDT";
 
+export type ChartTimeframe =
+  | "5s"
+  | "15s"
+  | "30s"
+  | "1m"
+  | "3m"
+  | "5m"
+  | "15m"
+  | "1h";
+
+export type AnalysisWindow =
+  | "30s"
+  | "1m"
+  | "5m"
+  | "15m"
+  | "1h"
+  | "4h";
+
 export type NormalizedTrade = {
   exchange: Exchange;
   symbol: MarketSymbol;

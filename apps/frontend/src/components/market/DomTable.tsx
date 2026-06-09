@@ -44,7 +44,7 @@ export function DomTable({ framed = true }: DomTableProps) {
             DOM
           </h2>
           <p className="mt-0.5 text-[10px] text-[#6B7280]">
-            Binance BTCUSDT depth20
+            DOM actual - Binance BTCUSDT depth20
           </p>
         </div>
       )}

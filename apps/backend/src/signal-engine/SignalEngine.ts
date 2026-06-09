@@ -1,14 +1,12 @@
 import type {
   LargeTradeEvent,
   MarketAlert,
-  MarketSymbol,
   NormalizedTrade,
   OrderBookLevel,
 } from "../types/market.js";
+import { MARKET_CONFIG } from "../config/marketConfig.js";
 
-const SYMBOL: MarketSymbol = "BTCUSDT";
-const LIQUIDITY_REMOVED_RATIO = 0.65;
-const ALERT_COOLDOWN_MS = 5_000;
+const { signal } = MARKET_CONFIG;
 
 type AlertListener = (alert: MarketAlert) => void;
 type LargeTradeListener = (largeTrade: LargeTradeEvent) => void;
@@ -19,12 +17,13 @@ export class SignalEngine {
   private lastAlertAtByKey = new Map<string, number>();
   private cvdSamples: Array<{ timestamp: number; value: number }> = [];
   private previousLargeLevels = new Map<string, number>();
-  private largeTradeMediumUsd = Number(process.env.LARGE_TRADE_MEDIUM_USD ?? 100_000);
-  private largeTradeHighUsd = Number(process.env.LARGE_TRADE_HIGH_USD ?? 500_000);
-  private largeTradeWhaleUsd = Number(process.env.LARGE_TRADE_WHALE_USD ?? 1_000_000);
-  private cvdSpikeThreshold = Number(process.env.CVD_SPIKE_THRESHOLD ?? 5);
-  private cvdSpikeWindowMs = Number(process.env.CVD_SPIKE_WINDOW_MS ?? 5_000);
-  private liquidityWallThreshold = Number(process.env.LIQUIDITY_WALL_THRESHOLD ?? 8);
+  private recentLargeTradeIds: string[] = [];
+  private largeTradeMediumUsd = signal.largeTradeMediumUsd;
+  private largeTradeHighUsd = signal.largeTradeHighUsd;
+  private largeTradeWhaleUsd = signal.largeTradeWhaleUsd;
+  private cvdSpikeThreshold = signal.cvdSpikeThreshold;
+  private cvdSpikeWindowMs = signal.cvdSpikeWindowMs;
+  private liquidityWallThreshold = signal.liquidityWallThreshold;
 
   onAlert(listener: AlertListener) {
     this.listeners.add(listener);
@@ -47,8 +46,14 @@ export class SignalEngine {
     const largeTradeSeverity = this.getLargeTradeSeverity(notionalUsd);
 
     if (largeTradeSeverity) {
+      const largeTradeId = createLargeTradeId(trade);
+
+      if (this.hasSeenLargeTrade(largeTradeId)) {
+        return;
+      }
+
       const largeTrade: LargeTradeEvent = {
-        id: createLargeTradeId(trade),
+        id: largeTradeId,
         exchange: trade.exchange,
         symbol: trade.symbol,
         side: trade.side,
@@ -86,7 +91,7 @@ export class SignalEngine {
         this.emitWithCooldown(`cvd_spike:${Math.sign(cvdDelta)}`, {
           id: createAlertId("cvd_spike"),
           type: "cvd_spike",
-          symbol: SYMBOL,
+          symbol: MARKET_CONFIG.symbol,
           message: `Desequilibrio probable en CVD: cambio de ${cvdDelta.toFixed(4)} BTC en los ultimos ${Math.round(this.cvdSpikeWindowMs / 1000)}s.`,
           severity: Math.abs(cvdDelta) >= this.cvdSpikeThreshold * 2 ? "high" : "medium",
           timestamp: trade.timestamp,
@@ -109,7 +114,7 @@ export class SignalEngine {
         this.emitWithCooldown(`liquidity_wall:${key}`, {
           id: createAlertId("liquidity_wall"),
           type: "liquidity_wall",
-          symbol: SYMBOL,
+          symbol: MARKET_CONFIG.symbol,
           message: `Muro detectado en ${side.toUpperCase()} cerca de ${level.price.toFixed(2)} con ${size.toFixed(4)} BTC.`,
           severity: size >= this.liquidityWallThreshold * 2 ? "high" : "medium",
           timestamp: Date.now(),
@@ -120,13 +125,13 @@ export class SignalEngine {
     for (const [key, previousSize] of this.previousLargeLevels) {
       const currentSize = currentLargeLevels.get(key) ?? 0;
 
-      if (currentSize <= previousSize * (1 - LIQUIDITY_REMOVED_RATIO)) {
+      if (currentSize <= previousSize * (1 - signal.liquidityRemovedRatio)) {
         const [, price] = key.split(":");
 
         this.emitWithCooldown(`liquidity_removed:${key}`, {
           id: createAlertId("liquidity_removed"),
           type: "liquidity_removed",
-          symbol: SYMBOL,
+          symbol: MARKET_CONFIG.symbol,
           message: `Liquidez retirada cerca de ${Number(price).toFixed(2)}. Posible cambio rapido en el DOM.`,
           severity: "medium",
           timestamp: Date.now(),
@@ -141,7 +146,7 @@ export class SignalEngine {
     const now = Date.now();
     const lastAlertAt = this.lastAlertAtByKey.get(key) ?? 0;
 
-    if (now - lastAlertAt < ALERT_COOLDOWN_MS) {
+    if (now - lastAlertAt < signal.alertCooldownMs) {
       return;
     }
 
@@ -156,6 +161,19 @@ export class SignalEngine {
     for (const listener of this.largeTradeListeners) {
       listener(largeTrade);
     }
+  }
+
+  private hasSeenLargeTrade(id: string) {
+    if (this.recentLargeTradeIds.includes(id)) {
+      return true;
+    }
+
+    this.recentLargeTradeIds = [id, ...this.recentLargeTradeIds].slice(
+      0,
+      signal.recentLargeTradeIds,
+    );
+
+    return false;
   }
 
   private getLargeTradeSeverity(notionalUsd: number): LargeTradeEvent["severity"] | null {

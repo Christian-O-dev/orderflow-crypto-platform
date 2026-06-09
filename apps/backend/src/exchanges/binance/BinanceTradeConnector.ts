@@ -1,5 +1,6 @@
 import WebSocket from "ws";
 import type { NormalizedTrade } from "../../types/market.js";
+import { MARKET_CONFIG } from "../../config/marketConfig.js";
 import {
   isBinanceTradeMessage,
   normalizeBinanceTrade,
@@ -18,7 +19,6 @@ export type BinanceTradeConnectorStatus =
 
 const BINANCE_BTCUSDT_TRADE_URL =
   "wss://stream.binance.com:9443/ws/btcusdt@trade";
-const RECONNECT_DELAY_MS = 2_500;
 
 export class BinanceTradeConnector {
   private ws: WebSocket | null = null;
@@ -87,7 +87,7 @@ export class BinanceTradeConnector {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
-    }, RECONNECT_DELAY_MS);
+    }, MARKET_CONFIG.binance.reconnectDelayMs);
 
     this.reconnectTimer.unref();
   }

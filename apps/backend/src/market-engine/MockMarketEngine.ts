@@ -5,11 +5,10 @@ import type {
   OrderBookLevel,
   PricePoint,
 } from "../types/market.js";
+import { MARKET_CONFIG } from "../config/marketConfig.js";
 
 const MAX_TRADES = 30;
 const MAX_POINTS = 120;
-const SYMBOL = "BTCUSDT";
-const EXCHANGE = "binance";
 
 export class MockMarketEngine {
   private lastPrice = 98_500;
@@ -36,8 +35,8 @@ export class MockMarketEngine {
     ].slice(-MAX_POINTS);
 
     return {
-      symbol: SYMBOL,
-      exchange: EXCHANGE,
+      symbol: MARKET_CONFIG.symbol,
+      exchange: MARKET_CONFIG.exchange,
       lastPrice: this.lastPrice,
       cvd: this.cvd,
       buyVolume: this.buyVolume,
@@ -66,8 +65,8 @@ export class MockMarketEngine {
     }
 
     return {
-      exchange: EXCHANGE,
-      symbol: SYMBOL,
+      exchange: MARKET_CONFIG.exchange,
+      symbol: MARKET_CONFIG.symbol,
       tradeId: `mock-${this.tradeSequence++}`,
       price: this.lastPrice,
       quantity,

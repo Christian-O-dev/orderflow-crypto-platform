@@ -1,6 +1,7 @@
 import type {
   ChartLiquidityBand,
   ChartTradeMarker,
+  ChartTimeframe,
   CvdPoint,
   LargeTradeEvent,
   PricePoint,
@@ -31,7 +32,6 @@ const EMPTY_PRICE_POINTS: PricePoint[] = [];
 const EMPTY_CVD_POINTS: CvdPoint[] = [];
 const EMPTY_LARGE_TRADES: LargeTradeEvent[] = [];
 const EMPTY_WHALE_ORDERS: WhaleLiquidityLevel[] = [];
-const CANDLE_INTERVAL_SECONDS = 5;
 const MAX_CVD_POINTS = 500;
 const MAX_LIQUIDITY_BANDS = 40;
 const MAX_TRADE_MARKERS = 80;
@@ -61,6 +61,8 @@ export function PriceChart() {
   const cvd = useMarketStore((state) => state.snapshot?.cvd ?? 0);
   const largeTrades = useMarketStore((state) => state.largeTrades ?? EMPTY_LARGE_TRADES);
   const whaleOrders = useMarketStore((state) => state.whaleOrders ?? EMPTY_WHALE_ORDERS);
+  const chartTimeframe = useMarketStore((state) => state.chartTimeframe);
+  const candleIntervalSeconds = timeframeToSeconds(chartTimeframe);
   const liquidityBands = useMemo(
     () => toChartLiquidityBands(whaleOrders, showCancelledOrders),
     [showCancelledOrders, whaleOrders],
@@ -151,14 +153,14 @@ export function PriceChart() {
       return;
     }
 
-    const data = toCandlestickData(pricePoints);
+    const data = toCandlestickData(pricePoints, candleIntervalSeconds);
     const latestPoint = data.at(-1);
 
     if (!latestPoint) {
       return;
     }
 
-    if (latestTimeRef.current === null) {
+    if (latestTimeRef.current === null || latestTimeRef.current !== latestPoint.time) {
       series.setData(data);
       chartRef.current?.timeScale().fitContent();
     } else {
@@ -166,7 +168,25 @@ export function PriceChart() {
     }
 
     latestTimeRef.current = latestPoint.time;
-  }, [pricePoints]);
+  }, [candleIntervalSeconds, pricePoints]);
+
+  useEffect(() => {
+    latestTimeRef.current = null;
+    latestCvdTimeRef.current = null;
+
+    const series = seriesRef.current;
+    const cvdSeries = cvdSeriesRef.current;
+
+    if (series) {
+      series.setData(toCandlestickData(pricePoints, candleIntervalSeconds));
+    }
+
+    if (cvdSeries) {
+      cvdSeries.setData(toCvdLineData(cvdPoints, MAX_CVD_POINTS, candleIntervalSeconds));
+    }
+
+    chartRef.current?.timeScale().fitContent();
+  }, [candleIntervalSeconds]);
 
   useEffect(() => {
     const series = cvdSeriesRef.current;
@@ -189,21 +209,21 @@ export function PriceChart() {
       return;
     }
 
-    const data = toCvdLineData(cvdPoints, MAX_CVD_POINTS);
+    const data = toCvdLineData(cvdPoints, MAX_CVD_POINTS, candleIntervalSeconds);
     const latestPoint = data.at(-1);
 
     if (!latestPoint) {
       return;
     }
 
-    if (latestCvdTimeRef.current === null) {
+    if (latestCvdTimeRef.current === null || latestCvdTimeRef.current !== latestPoint.time) {
       series.setData(data);
     } else {
       series.update(latestPoint);
     }
 
     latestCvdTimeRef.current = latestPoint.time;
-  }, [cvdPoints]);
+  }, [candleIntervalSeconds, cvdPoints]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -227,9 +247,9 @@ export function PriceChart() {
     }
 
     markersPlugin.setMarkers(
-      showLargeTrades ? toSeriesMarkers(tradeMarkers) : [],
+      showLargeTrades ? toSeriesMarkers(tradeMarkers, candleIntervalSeconds) : [],
     );
-  }, [showLargeTrades, tradeMarkers]);
+  }, [candleIntervalSeconds, showLargeTrades, tradeMarkers]);
 
   return (
     <section className="flex min-h-[280px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 lg:h-full lg:min-h-0">
@@ -259,7 +279,7 @@ export function PriceChart() {
             onChange={setShowLargeTrades}
           />
           <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-cyan-200">
-            {CANDLE_INTERVAL_SECONDS}s candles
+            {chartTimeframe} candles
           </span>
           <span className={`rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] ${cvdTone}`}>
             CVD {cvd.toFixed(2)}
@@ -322,12 +342,15 @@ function OverlayToggle({ checked, label, onChange }: OverlayToggleProps) {
   );
 }
 
-function toCandlestickData(points: PricePoint[]): CandlestickData<Time>[] {
+function toCandlestickData(
+  points: PricePoint[],
+  candleIntervalSeconds: number,
+): CandlestickData<Time>[] {
   const candles = new Map<number, CandlestickData<Time>>();
 
   for (const point of points) {
     const bucketTime =
-      Math.floor(point.time / CANDLE_INTERVAL_SECONDS) * CANDLE_INTERVAL_SECONDS;
+      Math.floor(point.time / candleIntervalSeconds) * candleIntervalSeconds;
     const existingCandle = candles.get(bucketTime);
 
     if (!existingCandle) {
@@ -349,12 +372,16 @@ function toCandlestickData(points: PricePoint[]): CandlestickData<Time>[] {
   return Array.from(candles.values());
 }
 
-function toCvdLineData(points: CvdPoint[], maxPoints: number) {
+function toCvdLineData(
+  points: CvdPoint[],
+  maxPoints: number,
+  candleIntervalSeconds: number,
+) {
   const cvdByBucket = new Map<number, number>();
 
   for (const point of points) {
     const bucketTime =
-      Math.floor(point.time / CANDLE_INTERVAL_SECONDS) * CANDLE_INTERVAL_SECONDS;
+      Math.floor(point.time / candleIntervalSeconds) * candleIntervalSeconds;
     cvdByBucket.set(bucketTime, point.value);
   }
 
@@ -435,12 +462,15 @@ function createLiquidityPriceLines(
   return [mainLine, edgeLine];
 }
 
-function toSeriesMarkers(markers: ChartTradeMarker[]): SeriesMarker<Time>[] {
+function toSeriesMarkers(
+  markers: ChartTradeMarker[],
+  candleIntervalSeconds: number,
+): SeriesMarker<Time>[] {
   return markers
     .map((marker) => {
       const time =
-        Math.floor(marker.timestamp / 1000 / CANDLE_INTERVAL_SECONDS) *
-        CANDLE_INTERVAL_SECONDS;
+        Math.floor(marker.timestamp / 1000 / candleIntervalSeconds) *
+        candleIntervalSeconds;
       const isBuy = marker.side === "buy";
 
       return {
@@ -509,4 +539,19 @@ function getTradeMarkerSize(marker: ChartTradeMarker) {
 
 function formatCompactUsd(value: number) {
   return compactUsdFormat.format(value);
+}
+
+function timeframeToSeconds(timeframe: ChartTimeframe) {
+  const amount = Number(timeframe.slice(0, -1));
+  const unit = timeframe.at(-1);
+
+  if (unit === "m") {
+    return amount * 60;
+  }
+
+  if (unit === "h") {
+    return amount * 60 * 60;
+  }
+
+  return amount;
 }
