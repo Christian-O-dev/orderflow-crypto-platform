@@ -13,7 +13,7 @@ export function MarketOverview() {
   const snapshot = useMarketStore((state) => state.snapshot);
 
   return (
-    <section className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
+    <section className="grid gap-1 sm:grid-cols-4 lg:flex lg:flex-wrap lg:justify-end">
       <MetricCard
         label="Last Price"
         value={snapshot ? `$${numberFormat.format(snapshot.lastPrice)}` : "--"}

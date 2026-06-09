@@ -8,7 +8,11 @@ import {
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
 import { useMarketStore } from "../../stores/marketStore";
-import { createTerminalChart } from "./chartUtils";
+import {
+  createTerminalChart,
+  observeTerminalChartSize,
+  resizeTerminalChart,
+} from "./chartUtils";
 
 const EMPTY_PRICE_POINTS: PricePoint[] = [];
 const CANDLE_INTERVAL_SECONDS = 5;
@@ -22,13 +26,28 @@ export function PriceChart() {
     (state) => state.snapshot?.pricePoints ?? EMPTY_PRICE_POINTS,
   );
 
+  function resetChartView() {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    const container = containerRef.current;
+
+    if (!chart || !series || !container) {
+      return;
+    }
+
+    resizeTerminalChart(container, chart);
+    series.priceScale().setAutoScale(true);
+    chart.timeScale().fitContent();
+  }
+
   useEffect(() => {
     if (!containerRef.current) {
       return;
     }
 
+    const container = containerRef.current;
     const chart = createTerminalChart({
-      container: containerRef.current,
+      container,
       crosshairColor: "rgba(34,211,238,0.35)",
     });
     const series = chart.addSeries(CandlestickSeries, {
@@ -43,8 +62,10 @@ export function PriceChart() {
 
     chartRef.current = chart;
     seriesRef.current = series;
+    const stopResizing = observeTerminalChartSize(container, chart);
 
     return () => {
+      stopResizing();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -77,7 +98,7 @@ export function PriceChart() {
   }, [pricePoints]);
 
   return (
-    <section className="border border-white/10 bg-[#111827]/90">
+    <section className="flex min-h-[280px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 lg:h-full lg:min-h-0">
       <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
         <div>
           <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#E5E7EB]">
@@ -92,8 +113,19 @@ export function PriceChart() {
         </span>
       </div>
 
-      <div className="h-[250px] p-1.5 lg:h-[43vh]">
-        <div ref={containerRef} className="h-full w-full" />
+      <div className="relative min-h-0 flex-1 overflow-hidden p-1.5">
+        <button
+          aria-label="Reestablecer grafico de precio"
+          className="absolute bottom-3 right-3 z-10 grid h-7 w-7 place-items-center border border-white/10 bg-[#0B0E14]/85 text-[#D1D5DB] shadow-2xl shadow-black/30 transition hover:border-cyan-300/30 hover:bg-[#111827] hover:text-cyan-200"
+          title="Reestablecer grafico"
+          type="button"
+          onClick={resetChartView}
+        >
+          <span className="text-[20px] leading-none" aria-hidden="true">
+            ↻
+          </span>
+        </button>
+        <div ref={containerRef} className="h-full w-full overflow-hidden" />
       </div>
     </section>
   );

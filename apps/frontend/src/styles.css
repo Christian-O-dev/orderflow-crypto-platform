@@ -1,4 +1,7 @@
-@import "tailwindcss";
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
 
 :root {
   font-family:
@@ -6,9 +9,31 @@
   color-scheme: dark;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   background: #070a0f;
   margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+}
+
+button {
+  background: transparent;
+}
+
+table {
+  border-collapse: collapse;
 }
 
 .font-mono {
@@ -16,6 +41,16 @@ body {
     "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 }
 
-* {
+*,
+::before,
+::after {
+  border-color: currentColor;
+  border-style: solid;
+  border-width: 0;
   box-sizing: border-box;
+}
+
+.dashboard-resizing canvas,
+.dashboard-resizing .tv-lightweight-charts {
+  pointer-events: none !important;
 }

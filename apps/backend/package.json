@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "npm --prefix ../../packages/shared run build",
     "dev": "tsx watch src/index.ts",
+    "prebuild": "npm --prefix ../../packages/shared run build",
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit"

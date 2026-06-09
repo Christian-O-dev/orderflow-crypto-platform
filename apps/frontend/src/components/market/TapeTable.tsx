@@ -24,7 +24,7 @@ export function TapeTable() {
   ).length;
 
   return (
-    <section className="flex h-[320px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/20 lg:h-[calc(100vh-4.75rem)]">
+    <section className="flex min-h-[320px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/20 lg:h-full lg:min-h-0">
       <div className="border-b border-white/10 bg-[#0B0E14]/70 px-2.5 py-2">
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -48,7 +48,7 @@ export function TapeTable() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full border-collapse font-mono text-[9.5px] tabular-nums sm:text-[10px]">
+        <table className="min-w-[360px] w-full border-collapse font-mono text-[9.5px] tabular-nums sm:min-w-[420px] sm:text-[10px]">
           <thead className="sticky top-0 z-10 border-b border-white/10 bg-[#0B0E14] text-[#6B7280]">
             <tr>
               <th className="px-1.5 py-1.5 text-left font-medium">Hora</th>
@@ -112,7 +112,7 @@ export function TapeTable() {
         </table>
 
         {visibleTrades.length === 0 && (
-          <div className="grid min-h-56 place-items-center px-4 text-sm text-[#6B7280]">
+          <div className="grid min-h-56 min-w-[360px] place-items-center px-4 text-sm text-[#6B7280] sm:min-w-[420px]">
             Esperando snapshots del backend...
           </div>
         )}

@@ -33,7 +33,7 @@ export function DomTable() {
   );
 
   return (
-    <section className="flex h-[320px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/20 lg:h-[calc(100vh-4.75rem)]">
+    <section className="flex min-h-[320px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/20 lg:h-full lg:min-h-0">
       <div className="border-b border-white/10 bg-[#0B0E14]/70 px-2.5 py-2">
         <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#E5E7EB]">
           DOM

@@ -8,7 +8,7 @@ export function AlertsPanel() {
   const latestAlerts = alerts.slice(0, 12);
 
   return (
-    <section className="border border-white/10 bg-[#111827]/90">
+    <section className="flex min-h-[150px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 lg:h-full lg:min-h-0">
       <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-[#0B0E14]/70 px-2 py-1">
         <div>
           <h2 className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#E5E7EB]">
@@ -23,13 +23,13 @@ export function AlertsPanel() {
         </span>
       </div>
 
-      <div className="max-h-[145px] overflow-auto p-1.5">
+      <div className="min-h-0 flex-1 overflow-auto p-1.5">
         {latestAlerts.length === 0 ? (
-          <div className="grid min-h-16 place-items-center text-center text-[10px] text-[#6B7280]">
+          <div className="grid min-h-16 min-w-[260px] place-items-center text-center text-[10px] text-[#6B7280]">
             Esperando alertas de mercado...
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="min-w-[260px] space-y-1">
             {latestAlerts.map((alert) => (
               <AlertRow key={alert.id} alert={alert} />
             ))}
@@ -44,7 +44,7 @@ function AlertRow({ alert }: { alert: MarketAlert }) {
   const tone = getAlertTone(alert.severity);
 
   return (
-    <article className={`border ${tone.border} ${tone.bg} px-1.5 py-1`}>
+    <article className={`min-w-[260px] border ${tone.border} ${tone.bg} px-1.5 py-1`}>
       <div className="flex items-center justify-between gap-2">
         <span
           className={`font-mono text-[8px] uppercase tracking-[0.12em] ${tone.text}`}

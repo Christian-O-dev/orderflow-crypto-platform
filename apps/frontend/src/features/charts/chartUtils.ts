@@ -46,8 +46,11 @@ export function createTerminalChart({
   container,
   crosshairColor,
 }: Pick<CreateTerminalLineChartOptions, "container" | "crosshairColor">): IChartApi {
+  const { width, height } = container.getBoundingClientRect();
+
   return createChart(container, {
-    autoSize: true,
+    width: Math.max(1, Math.floor(width)),
+    height: Math.max(1, Math.floor(height)),
     layout: {
       background: { type: ColorType.Solid, color: "#111827" },
       textColor: "#9CA3AF",
@@ -65,11 +68,50 @@ export function createTerminalChart({
       timeVisible: true,
       secondsVisible: true,
     },
+    handleScale: {
+      axisDoubleClickReset: {
+        price: true,
+        time: true,
+      },
+      axisPressedMouseMove: {
+        price: true,
+        time: true,
+      },
+      mouseWheel: true,
+      pinch: true,
+    },
     crosshair: {
       vertLine: { color: crosshairColor },
       horzLine: { color: crosshairColor },
     },
   });
+}
+
+export function observeTerminalChartSize(container: HTMLDivElement, chart: IChartApi) {
+  let animationFrame = 0;
+
+  const observer = new ResizeObserver(() => {
+    cancelAnimationFrame(animationFrame);
+    animationFrame = requestAnimationFrame(() => resizeTerminalChart(container, chart));
+  });
+
+  resizeTerminalChart(container, chart);
+  observer.observe(container);
+
+  return () => {
+    cancelAnimationFrame(animationFrame);
+    observer.disconnect();
+  };
+}
+
+export function resizeTerminalChart(container: HTMLDivElement, chart: IChartApi) {
+  const { width, height } = container.getBoundingClientRect();
+
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  chart.resize(Math.floor(width), Math.floor(height));
 }
 
 export function toUniqueLineData(points: ChartPoint[], maxPoints?: number): LineData<Time>[] {

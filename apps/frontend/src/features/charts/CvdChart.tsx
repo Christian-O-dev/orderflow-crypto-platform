@@ -6,7 +6,12 @@ import {
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
 import { useMarketStore } from "../../stores/marketStore";
-import { createTerminalLineChart, toUniqueLineData } from "./chartUtils";
+import {
+  createTerminalLineChart,
+  observeTerminalChartSize,
+  resizeTerminalChart,
+  toUniqueLineData,
+} from "./chartUtils";
 
 const EMPTY_CVD_POINTS: CvdPoint[] = [];
 const MAX_CVD_POINTS = 500;
@@ -23,13 +28,28 @@ export function CvdChart() {
   const pressureLabel = cvd >= 0 ? "Compradora" : "Vendedora";
   const pressureColor = cvd >= 0 ? "#34D399" : "#F87171";
 
+  function resetChartView() {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    const container = containerRef.current;
+
+    if (!chart || !series || !container) {
+      return;
+    }
+
+    resizeTerminalChart(container, chart);
+    series.priceScale().setAutoScale(true);
+    chart.timeScale().fitContent();
+  }
+
   useEffect(() => {
     if (!containerRef.current) {
       return;
     }
 
+    const container = containerRef.current;
     const { chart, series } = createTerminalLineChart({
-      container: containerRef.current,
+      container,
       lineColor: "#34D399",
       priceLineColor: "rgba(52,211,153,0.65)",
       crosshairColor: "rgba(156,163,175,0.35)",
@@ -37,8 +57,10 @@ export function CvdChart() {
 
     chartRef.current = chart;
     seriesRef.current = series;
+    const stopResizing = observeTerminalChartSize(container, chart);
 
     return () => {
+      stopResizing();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -85,7 +107,7 @@ export function CvdChart() {
   }, [cvdPoints]);
 
   return (
-    <section className="border border-white/10 bg-[#111827]/90">
+    <section className="flex min-h-[180px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 lg:h-full lg:min-h-0">
       <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
         <div>
           <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#E5E7EB]">
@@ -106,8 +128,19 @@ export function CvdChart() {
         </span>
       </div>
 
-      <div className="h-[140px] p-1.5">
-        <div ref={containerRef} className="h-full w-full" />
+      <div className="relative min-h-0 flex-1 overflow-hidden p-1.5">
+        <button
+          aria-label="Reestablecer grafico CVD"
+          className="absolute bottom-3 right-3 z-10 grid h-7 w-7 place-items-center border border-white/10 bg-[#0B0E14]/85 text-[#D1D5DB] shadow-2xl shadow-black/30 transition hover:border-cyan-300/30 hover:bg-[#111827] hover:text-cyan-200"
+          title="Reestablecer grafico"
+          type="button"
+          onClick={resetChartView}
+        >
+          <span className="text-[20px] leading-none" aria-hidden="true">
+            ↻
+          </span>
+        </button>
+        <div ref={containerRef} className="h-full w-full overflow-hidden" />
       </div>
     </section>
   );
