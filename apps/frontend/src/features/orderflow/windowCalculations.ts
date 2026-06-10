@@ -4,6 +4,8 @@ import type {
   HistoricalAggTrade,
   LargeTradeEvent,
   NormalizedTrade,
+  WhaleLiquidityLevel,
+  OrderFlowWindowSummary,
 } from "@orderflow/shared";
 
 const LARGE_TRADE_MEDIUM_USD = readViteNumberEnv(
@@ -22,8 +24,7 @@ type HistoricalDelta = {
   delta: number;
 };
 
-export type WindowOrderFlowSummary = HistoricalDelta & {
-  cvd: number;
+export type WindowOrderFlowSummary = OrderFlowWindowSummary & {
   cvdPoints: CvdPoint[];
   largeTrades: LargeTradeEvent[];
   historicalTradesCount: number;
@@ -32,18 +33,29 @@ export type WindowOrderFlowSummary = HistoricalDelta & {
 };
 
 export const EMPTY_WINDOW_ORDER_FLOW_SUMMARY: WindowOrderFlowSummary = {
+  symbol: "BTCUSDT",
+  exchange: "binance",
+  analysisWindow: "15m",
   buyVolume: 0,
   sellVolume: 0,
   delta: 0,
   cvd: 0,
   cvdPoints: [],
   largeTrades: [],
+  largeTradesCount: 0,
+  largeTradesUsd: 0,
+  activeBidLiquidityUsd: 0,
+  activeAskLiquidityUsd: 0,
+  dominantSide: "neutral",
+  marketBias: "neutral",
+  message: "Esperando datos...",
+  timestamp: 0,
   historicalTradesCount: 0,
   liveTradesCount: 0,
   totalTradesCount: 0,
 };
 
-type WindowTrade = {
+export type WindowTrade = {
   id: string;
   exchange: HistoricalAggTrade["exchange"];
   symbol: HistoricalAggTrade["symbol"];
@@ -81,19 +93,23 @@ export function detectHistoricalLargeTrades(
     .sort((left, right) => right.timestamp - left.timestamp);
 }
 
-export function calculateWindowOrderFlow({
+export function getCombinedWindowTrades({
   historicalTrades,
   liveTrades,
-  liveLargeTrades,
   analysisWindow,
   now,
 }: {
   historicalTrades: HistoricalAggTrade[];
   liveTrades: NormalizedTrade[];
-  liveLargeTrades: LargeTradeEvent[];
   analysisWindow: AnalysisWindow;
   now: number;
-}): WindowOrderFlowSummary {
+}): {
+  windowHistoricalTrades: HistoricalAggTrade[];
+  windowLiveTrades: NormalizedTrade[];
+  combinedTrades: WindowTrade[];
+  historicalTradeIdRanges: TradeIdRange[];
+  windowStart: number;
+} {
   const windowStart = now - analysisWindowToMs(analysisWindow);
   const windowHistoricalTrades = historicalTrades.filter(
     (trade) => trade.timestamp >= windowStart && trade.timestamp <= now,
@@ -111,6 +127,46 @@ export function calculateWindowOrderFlow({
     ...windowHistoricalTrades.map(toWindowHistoricalTrade),
     ...windowLiveTrades.map(toWindowLiveTrade),
   ].sort((left, right) => left.timestamp - right.timestamp);
+
+  return {
+    windowHistoricalTrades,
+    windowLiveTrades,
+    combinedTrades,
+    historicalTradeIdRanges,
+    windowStart,
+  };
+}
+
+export function calculateWindowOrderFlow({
+  historicalTrades,
+  liveTrades,
+  liveLargeTrades,
+  whaleOrders,
+  lastPrice,
+  analysisWindow,
+  now,
+}: {
+  historicalTrades: HistoricalAggTrade[];
+  liveTrades: NormalizedTrade[];
+  liveLargeTrades: LargeTradeEvent[];
+  whaleOrders: WhaleLiquidityLevel[];
+  lastPrice: number;
+  analysisWindow: AnalysisWindow;
+  now: number;
+}): WindowOrderFlowSummary {
+  const {
+    windowHistoricalTrades,
+    windowLiveTrades,
+    combinedTrades,
+    historicalTradeIdRanges,
+    windowStart,
+  } = getCombinedWindowTrades({
+    historicalTrades,
+    liveTrades,
+    analysisWindow,
+    now,
+  });
+
   const delta = calculateDelta(combinedTrades);
   const cvdPoints = calculateCvdPoints(combinedTrades, windowStart);
   const historicalLargeTrades = detectHistoricalLargeTrades(windowHistoricalTrades);
@@ -127,11 +183,85 @@ export function calculateWindowOrderFlow({
     ),
   );
 
+  let largeTradesUsd = 0;
+  for (const trade of combinedLargeTrades) {
+    largeTradesUsd += trade.notionalUsd;
+  }
+
+  let activeBidLiquidityUsd = 0;
+  let activeAskLiquidityUsd = 0;
+  let nearestBidWhalePrice: number | undefined;
+  let nearestAskWhalePrice: number | undefined;
+
+  for (const level of whaleOrders) {
+    if (level.status !== "active") {
+      continue;
+    }
+    if (level.side === "bid") {
+      activeBidLiquidityUsd += level.notionalUsd;
+      if (nearestBidWhalePrice === undefined || level.price > nearestBidWhalePrice) {
+        nearestBidWhalePrice = level.price;
+      }
+    } else {
+      activeAskLiquidityUsd += level.notionalUsd;
+      if (nearestAskWhalePrice === undefined || level.price < nearestAskWhalePrice) {
+        nearestAskWhalePrice = level.price;
+      }
+    }
+  }
+
+  const dominantSide =
+    delta.delta > 0 ? "buy" :
+    delta.delta < 0 ? "sell" : "neutral";
+
+  let marketBias: WindowOrderFlowSummary["marketBias"] = "neutral";
+  if (dominantSide === "buy") {
+    if (activeAskLiquidityUsd > activeBidLiquidityUsd * 2) {
+      marketBias = "mixed";
+    } else {
+      marketBias = "bullish";
+    }
+  } else if (dominantSide === "sell") {
+    if (activeBidLiquidityUsd > activeAskLiquidityUsd * 2) {
+      marketBias = "mixed";
+    } else {
+      marketBias = "bearish";
+    }
+  }
+
+  let message = "";
+  if (marketBias === "bullish") {
+    message = "Fuerte agresión compradora. Delta dominando al alza.";
+  } else if (marketBias === "bearish") {
+    message = "Fuerte agresión vendedora. Delta dominando a la baja.";
+  } else if (marketBias === "mixed") {
+    if (dominantSide === "buy") {
+      message = "Presión compradora en la ventana, pero existe liquidez ask relevante por encima.";
+    } else {
+      message = "Presión vendedora en la ventana, pero existe fuerte liquidez bid por debajo.";
+    }
+  } else {
+    message = "Contexto mixto o de consolidación. Sin sesgo direccional agresivo en esta ventana.";
+  }
+
   return {
+    symbol: "BTCUSDT",
+    exchange: "binance",
+    analysisWindow,
+    timestamp: now,
     ...delta,
     cvd: delta.delta,
     cvdPoints,
     largeTrades: combinedLargeTrades,
+    largeTradesCount: combinedLargeTrades.length,
+    largeTradesUsd,
+    activeBidLiquidityUsd,
+    activeAskLiquidityUsd,
+    nearestBidWhalePrice,
+    nearestAskWhalePrice,
+    dominantSide,
+    marketBias,
+    message,
     historicalTradesCount: windowHistoricalTrades.length,
     liveTradesCount: windowLiveTrades.length,
     totalTradesCount: combinedTrades.length,

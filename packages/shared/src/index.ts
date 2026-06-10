@@ -179,6 +179,37 @@ export type ChartTradeMarker = {
   timestamp: number;
 };
 
+export type MarketBias = "bullish" | "bearish" | "neutral" | "mixed";
+
+export type OrderFlowWindowSummary = {
+  symbol: MarketSymbol;
+  exchange: Exchange;
+  analysisWindow: AnalysisWindow;
+  buyVolume: number;
+  sellVolume: number;
+  delta: number;
+  cvd: number;
+  largeTradesCount: number;
+  largeTradesUsd: number;
+  activeBidLiquidityUsd: number;
+  activeAskLiquidityUsd: number;
+  nearestBidWhalePrice?: number;
+  nearestAskWhalePrice?: number;
+  dominantSide: "buy" | "sell" | "neutral";
+  marketBias: MarketBias;
+  message: string;
+  timestamp: number;
+};
+
+export type VolumeProfileLevel = {
+  price: number;
+  buyVolume: number;
+  sellVolume: number;
+  totalVolume: number;
+  delta: number;
+  isPoc: boolean;
+};
+
 export const SOCKET_EVENTS = {
   MARKET_SNAPSHOT: "market:snapshot",
   MARKET_ALERT: "market:alert",

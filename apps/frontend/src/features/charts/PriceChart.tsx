@@ -34,6 +34,7 @@ import {
   observeTerminalChartSize,
   resizeTerminalChart,
 } from "./chartUtils";
+import { VolumeProfileOverlay } from "./VolumeProfileOverlay";
 
 const EMPTY_PRICE_POINTS: PricePoint[] = [];
 const EMPTY_WHALE_ORDERS: WhaleLiquidityLevel[] = [];
@@ -71,6 +72,8 @@ export function PriceChart() {
   const [showCancelledOrders, setShowCancelledOrders] = useState(false);
   const [showLargeTrades, setShowLargeTrades] = useState(true);
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showVolumeProfile, setShowVolumeProfile] = useState(true);
+  const [profileTickSize, setProfileTickSize] = useState<number>(50);
   const [historicalCandles, setHistoricalCandles] = useState<MarketCandle[]>([]);
   const [historyStatus, setHistoryStatus] = useState<
     "synthetic" | "loading" | "exchange" | "error"
@@ -424,6 +427,23 @@ const largeTrades = windowOrderFlow.largeTrades;
             label="Show Heatmap"
             onChange={setShowHeatmap}
           />
+          <OverlayToggle
+            checked={showVolumeProfile}
+            label="Show Vol Profile"
+            onChange={setShowVolumeProfile}
+          />
+          {showVolumeProfile && (
+            <select
+              value={profileTickSize}
+              onChange={(e) => setProfileTickSize(Number(e.target.value))}
+              className="bg-white/[0.03] border border-white/10 text-cyan-200 px-1 py-0.5 text-[9px] uppercase tracking-wider outline-none"
+            >
+              <option value={10}>10 Tick</option>
+              <option value={25}>25 Tick</option>
+              <option value={50}>50 Tick</option>
+              <option value={100}>100 Tick</option>
+            </select>
+          )}
           <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-cyan-200">
             {chartTimeframe} candles
           </span>
@@ -434,6 +454,9 @@ const largeTrades = windowOrderFlow.largeTrades;
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden p-1.5">
+        {showVolumeProfile && seriesRef.current && (
+          <VolumeProfileOverlay series={seriesRef.current} tickSize={profileTickSize} />
+        )}
         <div className="pointer-events-none absolute bottom-[28%] left-3 z-10 border border-white/10 bg-[#0B0E14]/80 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-cyan-200">
           CVD exchange history + live session
         </div>

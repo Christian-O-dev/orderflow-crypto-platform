@@ -13,6 +13,8 @@ import type {
   LiquidityMapZonesByResolution,
 } from "@orderflow/shared";
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { sessionDb } from "../lib/sessionStorageDb";
 import {
   calculateWindowOrderFlow,
   EMPTY_WINDOW_ORDER_FLOW_SUMMARY,
@@ -58,8 +60,10 @@ type MarketState = {
   setDepthRange: (depthRange: LiquidityDepthRange) => void;
 };
 
-export const useMarketStore = create<MarketState>((set) => ({
-  connectionStatus: "connecting",
+export const useMarketStore = create<MarketState>()(
+  persist(
+    (set) => ({
+      connectionStatus: "connecting",
   snapshot: null,
   liveSessionTrades: [],
   windowOrderFlowSummary: EMPTY_WINDOW_ORDER_FLOW_SUMMARY,
@@ -125,7 +129,12 @@ export const useMarketStore = create<MarketState>((set) => ({
         return state;
       }
 
-      return { whaleOrders: nextWhaleOrders };
+      return { 
+        whaleOrders: nextWhaleOrders,
+        windowOrderFlowSummary: getWindowOrderFlowSummary(state, {
+          whaleOrders: nextWhaleOrders,
+        }),
+      };
     }),
   setLiquidityMapZones: (zonesByRes) =>
     set((state) => {
@@ -189,7 +198,35 @@ export const useMarketStore = create<MarketState>((set) => ({
     ),
   setDepthRange: (depthRange) =>
     set((state) => (state.depthRange === depthRange ? state : { depthRange })),
-}));
+    }),
+    {
+      name: "orderflow-session-storage",
+      storage: createJSONStorage(() => sessionDb),
+      partialize: (state) => ({
+        chartTimeframe: state.chartTimeframe,
+        analysisWindow: state.analysisWindow,
+        depthRange: state.depthRange,
+        largeTrades: state.largeTrades,
+        whaleOrders: state.whaleOrders,
+        windowOrderFlowSummary: {
+          ...state.windowOrderFlowSummary,
+          cvdPoints: [], // Exclude massive array
+        },
+      }),
+      merge: (persistedState: any, currentState) => {
+        return {
+          ...currentState,
+          chartTimeframe: persistedState.chartTimeframe ?? currentState.chartTimeframe,
+          analysisWindow: persistedState.analysisWindow ?? currentState.analysisWindow,
+          depthRange: persistedState.depthRange ?? currentState.depthRange,
+          largeTrades: persistedState.largeTrades ?? currentState.largeTrades,
+          whaleOrders: persistedState.whaleOrders ?? currentState.whaleOrders,
+          windowOrderFlowSummary: persistedState.windowOrderFlowSummary ?? currentState.windowOrderFlowSummary,
+        };
+      },
+    }
+  )
+);
 
 function getWindowOrderFlowSummary(
   state: MarketState,
@@ -198,13 +235,15 @@ function getWindowOrderFlowSummary(
     historicalAggTrades?: HistoricalAggTrade[];
     liveSessionTrades?: NormalizedTrade[];
     largeTrades?: LargeTradeEvent[];
+    whaleOrders?: WhaleLiquidityLevel[];
     analysisWindow?: AnalysisWindow;
   } = {},
 ) {
-  const snapshot = overrides.snapshot ?? state.snapshot;
+  const snapshot = overrides.snapshot !== undefined ? overrides.snapshot : state.snapshot;
   const historicalTrades = overrides.historicalAggTrades ?? state.historicalAggTrades;
   const liveTrades = overrides.liveSessionTrades ?? state.liveSessionTrades;
   const liveLargeTrades = overrides.largeTrades ?? state.largeTrades;
+  const whaleOrders = overrides.whaleOrders ?? state.whaleOrders;
   const analysisWindow = overrides.analysisWindow ?? state.analysisWindow;
 
   if (!snapshot && historicalTrades.length === 0 && liveTrades.length === 0) {
@@ -215,6 +254,8 @@ function getWindowOrderFlowSummary(
     historicalTrades,
     liveTrades,
     liveLargeTrades,
+    whaleOrders,
+    lastPrice: snapshot?.lastPrice ?? 0,
     analysisWindow,
     now: snapshot?.timestamp ?? Date.now(),
   });

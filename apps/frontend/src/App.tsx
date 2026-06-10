@@ -5,6 +5,7 @@ import { AlertsPanel } from "./components/market/AlertsPanel";
 import { LargeTradesPanel } from "./components/market/LargeTradesPanel";
 import { LiquidityPanel } from "./components/market/LiquidityPanel";
 import { MarketHeader } from "./components/market/MarketHeader";
+import { OrderFlowWindowSummaryPanel } from "./components/market/OrderFlowWindowSummaryPanel";
 import { TapeTable } from "./components/market/TapeTable";
 import { PriceChart } from "./features/charts/PriceChart";
 import { useHistoricalAggTrades } from "./hooks/useHistoricalAggTrades";
@@ -18,6 +19,7 @@ function App() {
   return (
     <TerminalShell>
       <MarketHeader />
+      <OrderFlowWindowSummaryPanel />
 
       <ResizableDashboard
         alerts={<AlertsPanel />}
