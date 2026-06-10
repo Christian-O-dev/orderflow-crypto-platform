@@ -40,7 +40,7 @@ export const MARKET_CONFIG = {
   },
   whaleOrders: {
     thresholdUsd: readNumberEnv("WHALE_ORDER_THRESHOLD_USD", 1_000_000),
-    maxTrackedLevels: readNumberEnv("MAX_TRACKED_WHALE_LEVELS", 100),
+    maxTrackedLevels: readNumberEnv("MAX_TRACKED_WHALE_LEVELS", 500),
   },
   binance: {
     reconnectDelayMs: readNumberEnv("BINANCE_RECONNECT_DELAY_MS", 2_500),
@@ -52,6 +52,6 @@ export const MARKET_CONFIG = {
     depthFallbackLevels: readNumberEnv("BINANCE_DEPTH_FALLBACK_LEVELS", 20),
   },
   frontendLimits: {
-    maxWhaleOrders: readNumberEnv("MAX_WHALE_ORDERS_TO_CLIENT", 100),
+    maxWhaleOrders: readNumberEnv("MAX_WHALE_ORDERS_TO_CLIENT", 500),
   },
 } as const;

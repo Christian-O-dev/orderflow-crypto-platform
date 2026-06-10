@@ -1,3 +1,4 @@
+import { useWindowOrderFlow } from "../../features/orderflow/useWindowOrderFlow";
 import { useMarketStore } from "../../stores/marketStore";
 import { MetricCard } from "./MetricCard";
 
@@ -11,6 +12,7 @@ const volumeFormat = new Intl.NumberFormat("en-US", {
 
 export function MarketOverview() {
   const snapshot = useMarketStore((state) => state.snapshot);
+  const windowOrderFlow = useWindowOrderFlow();
 
   return (
     <section className="grid gap-1 sm:grid-cols-4 lg:flex lg:flex-wrap lg:justify-end">
@@ -21,17 +23,17 @@ export function MarketOverview() {
       />
       <MetricCard
         label="CVD"
-        value={snapshot ? volumeFormat.format(snapshot.cvd) : "--"}
-        tone={snapshot && snapshot.cvd < 0 ? "sell" : "buy"}
+        value={volumeFormat.format(windowOrderFlow.cvd)}
+        tone={windowOrderFlow.cvd < 0 ? "sell" : "buy"}
       />
       <MetricCard
         label="Buy Volume"
-        value={snapshot ? volumeFormat.format(snapshot.buyVolume) : "--"}
+        value={volumeFormat.format(windowOrderFlow.buyVolume)}
         tone="buy"
       />
       <MetricCard
         label="Sell Volume"
-        value={snapshot ? volumeFormat.format(snapshot.sellVolume) : "--"}
+        value={volumeFormat.format(windowOrderFlow.sellVolume)}
         tone="sell"
       />
     </section>

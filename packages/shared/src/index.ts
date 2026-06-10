@@ -21,6 +21,8 @@ export type AnalysisWindow =
   | "1h"
   | "4h";
 
+export type LiquidityDepthRange = "0.25%" | "0.5%" | "1%" | "2%" | "5%";
+
 export type NormalizedTrade = {
   exchange: Exchange;
   symbol: MarketSymbol;
@@ -123,6 +125,13 @@ export type WhaleLiquidityLevel = {
   lastSeen: number;
   durationMs: number;
   status: "active" | "cancelled" | "partially_removed";
+};
+
+export type DeepLiquidityLevel = WhaleLiquidityLevel & {
+  distanceFromPrice: number;
+  distancePercent: number;
+  ageSeconds: number;
+  zone: "near" | "mid" | "far";
 };
 
 export type ChartLiquidityBand = {

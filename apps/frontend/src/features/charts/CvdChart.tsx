@@ -5,6 +5,7 @@ import {
   type Time,
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
+import { useWindowOrderFlow } from "../orderflow/useWindowOrderFlow";
 import { useMarketStore } from "../../stores/marketStore";
 import {
   createTerminalLineChart,
@@ -13,7 +14,6 @@ import {
   toUniqueLineData,
 } from "./chartUtils";
 
-const EMPTY_CVD_POINTS: CvdPoint[] = [];
 const MAX_CVD_POINTS = 500;
 
 export function CvdChart() {
@@ -21,10 +21,10 @@ export function CvdChart() {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const latestTimeRef = useRef<Time | null>(null);
-  const cvdPoints = useMarketStore(
-    (state) => state.snapshot?.cvdPoints ?? EMPTY_CVD_POINTS,
-  );
-  const cvd = useMarketStore((state) => state.snapshot?.cvd ?? 0);
+  const analysisWindow = useMarketStore((state) => state.analysisWindow);
+  const windowOrderFlow = useWindowOrderFlow();
+  const cvdPoints: CvdPoint[] = windowOrderFlow.cvdPoints;
+  const cvd = windowOrderFlow.cvd;
   const pressureLabel = cvd >= 0 ? "Compradora" : "Vendedora";
   const pressureColor = cvd >= 0 ? "#34D399" : "#F87171";
 
@@ -85,7 +85,7 @@ export function CvdChart() {
   useEffect(() => {
     const series = seriesRef.current;
 
-    if (!series || cvdPoints.length === 0) {
+    if (!series) {
       return;
     }
 
@@ -93,6 +93,8 @@ export function CvdChart() {
     const latestPoint = data.at(-1);
 
     if (!latestPoint) {
+      series.setData([]);
+      latestTimeRef.current = null;
       return;
     }
 
@@ -114,7 +116,7 @@ export function CvdChart() {
             CVD Chart
           </h2>
           <p className="mt-0.5 text-[10px] text-[#6B7280]">
-            Delta acumulado calculado en backend
+            Ventana {analysisWindow}: exchange history + live session
           </p>
         </div>
         <span

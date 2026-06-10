@@ -2462,7 +2462,7 @@ Objetivo:
 6. Mostrar etiqueta indicando que la ventana usa exchange history + live session.
 7. Mantener npm run typecheck y npm run build funcionando.
 
-Criterios:
+Criterios:   
 - AnalysisWindow afecta los cálculos.
 - La app refleja contexto real del exchange.
 - No se rompe el flujo live.

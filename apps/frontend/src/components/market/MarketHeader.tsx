@@ -1,5 +1,6 @@
 import { AnalysisWindowSelector } from "./AnalysisWindowSelector";
 import { ConnectionStatus } from "./ConnectionStatus";
+import { DepthRangeSelector } from "./DepthRangeSelector";
 import { useMarketStore } from "../../stores/marketStore";
 import { MarketOverview } from "./MarketOverview";
 
@@ -25,6 +26,7 @@ export function MarketHeader() {
         <div className="flex flex-col gap-1 lg:items-end">
           <div className="flex flex-wrap items-center justify-start gap-1.5 lg:justify-end">
             <AnalysisWindowSelector />
+            <DepthRangeSelector />
           </div>
           <MarketOverview />
         </div>

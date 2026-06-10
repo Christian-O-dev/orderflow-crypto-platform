@@ -1,8 +1,7 @@
 import type { LargeTradeEvent } from "@orderflow/shared";
 import clsx from "clsx";
+import { useWindowOrderFlow } from "../../features/orderflow/useWindowOrderFlow";
 import { useMarketStore } from "../../stores/marketStore";
-
-const EMPTY_LARGE_TRADES: LargeTradeEvent[] = [];
 
 const priceFormat = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
@@ -20,13 +19,9 @@ const usdFormat = new Intl.NumberFormat("en-US", {
 });
 
 export function LargeTradesPanel() {
-  const largeTrades = useMarketStore(
-    (state) => state.largeTrades ?? EMPTY_LARGE_TRADES,
-  );
+  const windowOrderFlow = useWindowOrderFlow();
+  const largeTrades = windowOrderFlow.largeTrades;
   const analysisWindow = useMarketStore((state) => state.analysisWindow);
-  const historicalAggTradesCount = useMarketStore(
-    (state) => state.historicalAggTrades.length,
-  );
   const historicalAggTradesStatus = useMarketStore(
     (state) => state.historicalAggTradesStatus,
   );
@@ -40,17 +35,17 @@ export function LargeTradesPanel() {
               Large Trades
             </h2>
             <p className="mt-0.5 text-[10px] text-[#6B7280]">
-              Large Trades por ventana - {analysisWindow}
+              Ventana {analysisWindow}: exchange history + live session
             </p>
           </div>
           <div className="flex flex-col items-end gap-1">
             <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-[#9CA3AF]">
-              {largeTrades.length}/100 live
+              {largeTrades.length}/100 window
             </span>
             <span className="rounded-full border border-amber-300/15 bg-amber-300/[0.06] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-amber-100">
               {historicalAggTradesStatus === "loading"
                 ? "hist loading"
-                : `${historicalAggTradesCount} hist`}
+                : `${windowOrderFlow.historicalTradesCount} hist + ${windowOrderFlow.liveTradesCount} live`}
             </span>
           </div>
         </div>

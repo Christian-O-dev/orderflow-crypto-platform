@@ -5,6 +5,7 @@ import type {
   ChartTimeframe,
   CvdPoint,
   LargeTradeEvent,
+  LiquidityDepthRange,
   MarketCandle,
   PricePoint,
   WhaleLiquidityLevel,
@@ -25,6 +26,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TimeframeSelector } from "../../components/market/TimeframeSelector";
 import { useMarketStore } from "../../stores/marketStore";
+import { useWindowOrderFlow } from "../orderflow/useWindowOrderFlow";
 import {
   createTerminalChart,
   observeTerminalChartSize,
@@ -32,8 +34,6 @@ import {
 } from "./chartUtils";
 
 const EMPTY_PRICE_POINTS: PricePoint[] = [];
-const EMPTY_CVD_POINTS: CvdPoint[] = [];
-const EMPTY_LARGE_TRADES: LargeTradeEvent[] = [];
 const EMPTY_WHALE_ORDERS: WhaleLiquidityLevel[] = [];
 const MAX_CVD_POINTS = 500;
 const MAX_LIQUIDITY_BANDS = 40;
@@ -74,12 +74,13 @@ export function PriceChart() {
   const pricePoints = useMarketStore(
     (state) => state.snapshot?.pricePoints ?? EMPTY_PRICE_POINTS,
   );
-  const cvdPoints = useMarketStore(
-    (state) => state.snapshot?.cvdPoints ?? EMPTY_CVD_POINTS,
-  );
-  const cvd = useMarketStore((state) => state.snapshot?.cvd ?? 0);
-  const largeTrades = useMarketStore((state) => state.largeTrades ?? EMPTY_LARGE_TRADES);
+  const windowOrderFlow = useWindowOrderFlow();
+  const cvdPoints = windowOrderFlow.cvdPoints;
+  const cvd = windowOrderFlow.cvd;
+  const largeTrades = windowOrderFlow.largeTrades;
   const whaleOrders = useMarketStore((state) => state.whaleOrders ?? EMPTY_WHALE_ORDERS);
+  const lastPrice = useMarketStore((state) => state.snapshot?.lastPrice ?? 0);
+  const depthRange = useMarketStore((state) => state.depthRange);
   const chartTimeframe = useMarketStore((state) => state.chartTimeframe);
   const candleIntervalSeconds = timeframeToSeconds(chartTimeframe);
   const usesExchangeHistory = isExchangeHistoryTimeframe(chartTimeframe);
@@ -90,8 +91,8 @@ export function PriceChart() {
     historicalCandles.every((candle) => candle.interval === chartTimeframe);
   const usesSyntheticCandles = !usesExchangeHistory || historyStatus === "error";
   const liquidityBands = useMemo(
-    () => toChartLiquidityBands(whaleOrders, showCancelledOrders),
-    [showCancelledOrders, whaleOrders],
+    () => toChartLiquidityBands(whaleOrders, showCancelledOrders, lastPrice, depthRange),
+    [depthRange, lastPrice, showCancelledOrders, whaleOrders],
   );
   const tradeMarkers = useMemo(() => toChartTradeMarkers(largeTrades), [largeTrades]);
   const cvdTone = cvd >= 0 ? "text-emerald-200" : "text-red-200";
@@ -316,7 +317,7 @@ export function PriceChart() {
   useEffect(() => {
     const series = cvdSeriesRef.current;
 
-    if (!series || cvdPoints.length === 0) {
+    if (!series) {
       return;
     }
 
@@ -324,6 +325,8 @@ export function PriceChart() {
     const latestPoint = data.at(-1);
 
     if (!latestPoint) {
+      series.setData([]);
+      latestCvdTimeRef.current = null;
       return;
     }
 
@@ -401,7 +404,7 @@ export function PriceChart() {
 
       <div className="relative min-h-0 flex-1 overflow-hidden p-1.5">
         <div className="pointer-events-none absolute bottom-[28%] left-3 z-10 border border-white/10 bg-[#0B0E14]/80 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-cyan-200">
-          CVD
+          CVD exchange history + live session
         </div>
         <button
           aria-label="Reestablecer grafico de precio"
@@ -554,11 +557,16 @@ function toCvdLineData(
 function toChartLiquidityBands(
   whaleOrders: WhaleLiquidityLevel[],
   includeCancelled: boolean,
+  lastPrice: number,
+  depthRange: LiquidityDepthRange,
 ): ChartLiquidityBand[] {
+  const maxDistancePercent = depthRangeToPercent(depthRange);
+
   return whaleOrders
     .filter(
       (level) =>
-        level.status === "active" || includeCancelled,
+        (level.status === "active" || includeCancelled) &&
+        isWithinDepthRange(level.price, lastPrice, maxDistancePercent),
     )
     .slice(0, MAX_LIQUIDITY_BANDS)
     .map((level) => ({
@@ -571,6 +579,22 @@ function toChartLiquidityBands(
       firstSeen: level.firstSeen,
       lastSeen: level.lastSeen,
     }));
+}
+
+function isWithinDepthRange(
+  price: number,
+  lastPrice: number,
+  maxDistancePercent: number,
+) {
+  if (lastPrice <= 0) {
+    return false;
+  }
+
+  return (Math.abs(price - lastPrice) / lastPrice) * 100 <= maxDistancePercent;
+}
+
+function depthRangeToPercent(range: LiquidityDepthRange) {
+  return Number(range.replace("%", ""));
 }
 
 function toChartTradeMarkers(largeTrades: LargeTradeEvent[]): ChartTradeMarker[] {

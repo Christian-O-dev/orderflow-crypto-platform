@@ -1,7 +1,9 @@
 export type {
   CvdPoint,
+  DeepLiquidityLevel,
   Exchange,
   LargeTradeEvent,
+  LiquidityDepthRange,
   MarketAlert,
   MarketSnapshot,
   MarketSymbol,

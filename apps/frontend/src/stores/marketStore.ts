@@ -3,22 +3,32 @@ import type {
   ChartTimeframe,
   HistoricalAggTrade,
   LargeTradeEvent,
+  LiquidityDepthRange,
   MarketAlert,
   MarketSnapshot,
+  NormalizedTrade,
   WhaleLiquidityLevel,
 } from "@orderflow/shared";
 import { create } from "zustand";
+import {
+  calculateWindowOrderFlow,
+  EMPTY_WINDOW_ORDER_FLOW_SUMMARY,
+  type WindowOrderFlowSummary,
+} from "../features/orderflow/windowCalculations";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected";
 type HistoricalAggTradesStatus = "idle" | "loading" | "ready" | "error";
 const MAX_ALERTS = 100;
 const MAX_LARGE_TRADES = 100;
-const MAX_WHALE_ORDERS = 100;
+const MAX_WHALE_ORDERS = 500;
 const MAX_HISTORICAL_AGG_TRADES = 5000;
+const MAX_LIVE_SESSION_TRADES = 5000;
 
 type MarketState = {
   connectionStatus: ConnectionStatus;
   snapshot: MarketSnapshot | null;
+  liveSessionTrades: NormalizedTrade[];
+  windowOrderFlowSummary: WindowOrderFlowSummary;
   alerts: MarketAlert[];
   largeTrades: LargeTradeEvent[];
   whaleOrders: WhaleLiquidityLevel[];
@@ -27,6 +37,7 @@ type MarketState = {
   historicalAggTradesError: string | null;
   chartTimeframe: ChartTimeframe;
   analysisWindow: AnalysisWindow;
+  depthRange: LiquidityDepthRange;
   setConnectionStatus: (connectionStatus: ConnectionStatus) => void;
   setSnapshot: (snapshot: MarketSnapshot) => void;
   addAlert: (alert: MarketAlert) => void;
@@ -37,11 +48,14 @@ type MarketState = {
   setHistoricalAggTradesError: (error: string) => void;
   setChartTimeframe: (chartTimeframe: ChartTimeframe) => void;
   setAnalysisWindow: (analysisWindow: AnalysisWindow) => void;
+  setDepthRange: (depthRange: LiquidityDepthRange) => void;
 };
 
 export const useMarketStore = create<MarketState>((set) => ({
   connectionStatus: "connecting",
   snapshot: null,
+  liveSessionTrades: [],
+  windowOrderFlowSummary: EMPTY_WINDOW_ORDER_FLOW_SUMMARY,
   alerts: [],
   largeTrades: [],
   whaleOrders: [],
@@ -49,12 +63,29 @@ export const useMarketStore = create<MarketState>((set) => ({
   historicalAggTradesStatus: "idle",
   historicalAggTradesError: null,
   chartTimeframe: "1m",
-  analysisWindow: "1m",
+  analysisWindow: "15m",
+  depthRange: "1%",
   setConnectionStatus: (connectionStatus) =>
     set((state) =>
       state.connectionStatus === connectionStatus ? state : { connectionStatus },
     ),
-  setSnapshot: (snapshot) => set({ snapshot }),
+  setSnapshot: (snapshot) =>
+    set((state) => {
+      const liveSessionTrades = mergeLiveSessionTrades(
+        state.liveSessionTrades,
+        snapshot.trades,
+        snapshot.timestamp,
+      );
+
+      return {
+        snapshot,
+        liveSessionTrades,
+        windowOrderFlowSummary: getWindowOrderFlowSummary(state, {
+          snapshot,
+          liveSessionTrades,
+        }),
+      };
+    }),
   addAlert: (alert) =>
     set((state) => ({ alerts: [alert, ...state.alerts].slice(0, MAX_ALERTS) })),
   addLargeTrade: (largeTrade) =>
@@ -62,9 +93,16 @@ export const useMarketStore = create<MarketState>((set) => ({
       if (state.largeTrades.some((trade) => trade.id === largeTrade.id)) {
         return state;
       }
+      const largeTrades = [largeTrade, ...state.largeTrades].slice(
+        0,
+        MAX_LARGE_TRADES,
+      );
 
       return {
-        largeTrades: [largeTrade, ...state.largeTrades].slice(0, MAX_LARGE_TRADES),
+        largeTrades,
+        windowOrderFlowSummary: getWindowOrderFlowSummary(state, {
+          largeTrades,
+        }),
       };
     }),
   setWhaleOrders: (whaleOrders) =>
@@ -86,26 +124,103 @@ export const useMarketStore = create<MarketState>((set) => ({
       historicalAggTradesError: null,
     }),
   setHistoricalAggTrades: (trades) =>
-    set({
-      historicalAggTrades: trades.slice(0, MAX_HISTORICAL_AGG_TRADES),
-      historicalAggTradesStatus: "ready",
-      historicalAggTradesError: null,
+    set((state) => {
+      const historicalAggTrades = trades.slice(0, MAX_HISTORICAL_AGG_TRADES);
+
+      return {
+        historicalAggTrades,
+        historicalAggTradesStatus: "ready",
+        historicalAggTradesError: null,
+        windowOrderFlowSummary: getWindowOrderFlowSummary(state, {
+          historicalAggTrades,
+        }),
+      };
     }),
   setHistoricalAggTradesError: (error) =>
-    set({
+    set((state) => ({
       historicalAggTrades: [],
       historicalAggTradesStatus: "error",
       historicalAggTradesError: error,
-    }),
+      windowOrderFlowSummary: getWindowOrderFlowSummary(state, {
+        historicalAggTrades: [],
+      }),
+    })),
   setChartTimeframe: (chartTimeframe) =>
     set((state) =>
       state.chartTimeframe === chartTimeframe ? state : { chartTimeframe },
     ),
   setAnalysisWindow: (analysisWindow) =>
     set((state) =>
-      state.analysisWindow === analysisWindow ? state : { analysisWindow },
+      state.analysisWindow === analysisWindow
+        ? state
+        : {
+            analysisWindow,
+            windowOrderFlowSummary: getWindowOrderFlowSummary(state, {
+              analysisWindow,
+            }),
+          },
     ),
+  setDepthRange: (depthRange) =>
+    set((state) => (state.depthRange === depthRange ? state : { depthRange })),
 }));
+
+function getWindowOrderFlowSummary(
+  state: MarketState,
+  overrides: {
+    snapshot?: MarketSnapshot | null;
+    historicalAggTrades?: HistoricalAggTrade[];
+    liveSessionTrades?: NormalizedTrade[];
+    largeTrades?: LargeTradeEvent[];
+    analysisWindow?: AnalysisWindow;
+  } = {},
+) {
+  const snapshot = overrides.snapshot ?? state.snapshot;
+  const historicalTrades = overrides.historicalAggTrades ?? state.historicalAggTrades;
+  const liveTrades = overrides.liveSessionTrades ?? state.liveSessionTrades;
+  const liveLargeTrades = overrides.largeTrades ?? state.largeTrades;
+  const analysisWindow = overrides.analysisWindow ?? state.analysisWindow;
+
+  if (!snapshot && historicalTrades.length === 0 && liveTrades.length === 0) {
+    return EMPTY_WINDOW_ORDER_FLOW_SUMMARY;
+  }
+
+  return calculateWindowOrderFlow({
+    historicalTrades,
+    liveTrades,
+    liveLargeTrades,
+    analysisWindow,
+    now: snapshot?.timestamp ?? Date.now(),
+  });
+}
+
+function mergeLiveSessionTrades(
+  currentTrades: NormalizedTrade[],
+  snapshotTrades: NormalizedTrade[],
+  now: number,
+) {
+  const oldestAllowedTimestamp = now - 4 * 60 * 60 * 1000;
+  const tradesById = new Map<string, NormalizedTrade>();
+
+  for (const trade of currentTrades) {
+    if (trade.timestamp >= oldestAllowedTimestamp) {
+      tradesById.set(getLiveTradeKey(trade), trade);
+    }
+  }
+
+  for (const trade of snapshotTrades) {
+    if (trade.timestamp >= oldestAllowedTimestamp) {
+      tradesById.set(getLiveTradeKey(trade), trade);
+    }
+  }
+
+  return Array.from(tradesById.values())
+    .sort((left, right) => right.timestamp - left.timestamp)
+    .slice(0, MAX_LIVE_SESSION_TRADES);
+}
+
+function getLiveTradeKey(trade: NormalizedTrade) {
+  return `${trade.exchange}:${trade.symbol}:${trade.tradeId}`;
+}
 
 function getWhaleOrdersSignature(whaleOrders: WhaleLiquidityLevel[]) {
   return whaleOrders
