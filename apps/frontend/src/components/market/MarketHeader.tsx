@@ -2,7 +2,6 @@ import { AnalysisWindowSelector } from "./AnalysisWindowSelector";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { useMarketStore } from "../../stores/marketStore";
 import { MarketOverview } from "./MarketOverview";
-import { TimeframeSelector } from "./TimeframeSelector";
 
 export function MarketHeader() {
   const snapshot = useMarketStore((state) => state.snapshot);
@@ -25,7 +24,6 @@ export function MarketHeader() {
 
         <div className="flex flex-col gap-1 lg:items-end">
           <div className="flex flex-wrap items-center justify-start gap-1.5 lg:justify-end">
-            <TimeframeSelector />
             <AnalysisWindowSelector />
           </div>
           <MarketOverview />

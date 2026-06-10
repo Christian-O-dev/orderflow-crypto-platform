@@ -24,6 +24,12 @@ export function LargeTradesPanel() {
     (state) => state.largeTrades ?? EMPTY_LARGE_TRADES,
   );
   const analysisWindow = useMarketStore((state) => state.analysisWindow);
+  const historicalAggTradesCount = useMarketStore(
+    (state) => state.historicalAggTrades.length,
+  );
+  const historicalAggTradesStatus = useMarketStore(
+    (state) => state.historicalAggTradesStatus,
+  );
 
   return (
     <section className="flex min-h-[220px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/20 lg:h-full lg:min-h-0">
@@ -37,9 +43,16 @@ export function LargeTradesPanel() {
               Large Trades por ventana - {analysisWindow}
             </p>
           </div>
-          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-[#9CA3AF]">
-            {largeTrades.length}/100
-          </span>
+          <div className="flex flex-col items-end gap-1">
+            <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-[#9CA3AF]">
+              {largeTrades.length}/100 live
+            </span>
+            <span className="rounded-full border border-amber-300/15 bg-amber-300/[0.06] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-amber-100">
+              {historicalAggTradesStatus === "loading"
+                ? "hist loading"
+                : `${historicalAggTradesCount} hist`}
+            </span>
+          </div>
         </div>
       </div>
 

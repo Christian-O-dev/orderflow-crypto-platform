@@ -1796,3 +1796,1315 @@ Diario de trading
 IA de resumen de mercado
 Multi-exchange
 ```
+hasta aqui todo completado...
+
+
+# Continuación Realineada — Order Flow con Historial del Exchange sin Base de Datos Propia
+
+## Objetivo de esta continuación
+
+Esta continuación corrige el rumbo del proyecto.
+
+Por ahora no vamos a diseñar la plataforma como si tuviéramos una base de datos grande ni un servidor funcionando 24/7.
+
+La nueva estrategia será:
+
+```txt id="i0axxl"
+Exchange-first
+Stateless
+Historial bajo demanda
+Cálculo en memoria
+DOM profundo live
+Sin dependencia fuerte de base de datos
+```
+
+La app debe reflejar el máximo contexto real posible usando datos públicos del exchange.
+
+---
+
+# Idea principal del proyecto
+
+La app sigue siendo:
+
+```txt id="5gmnxo"
+Herramienta de ayuda para traders de Order Flow.
+```
+
+No es:
+
+```txt id="pwm0ce"
+bot de trading
+sistema de señales
+IA predictiva
+plataforma institucional con base de datos propia
+```
+
+La página debe ayudar a leer:
+
+```txt id="c8s7lh"
+precio real
+historial de BTC
+trades agresivos
+CVD
+Large Trades
+DOM profundo
+Whale Orders activas
+liquidez alejada del precio
+tiempo observado de la liquidez
+Volume Profile
+contexto de ventana
+```
+
+---
+
+# Nueva regla técnica
+
+Separar siempre estos conceptos:
+
+```txt id="ddt9q8"
+Timeframe = velas del gráfico.
+Analysis Window = cálculos de Order Flow.
+Depth Range = profundidad del DOM.
+Observed Time = tiempo observado por nuestra app.
+```
+
+No mezclar DOM con temporalidades.
+
+El DOM no tiene velas.
+
+El DOM es liquidez actual.
+
+Lo que sí podemos hacer es:
+
+```txt id="y5q5mu"
+ver DOM más profundo
+medir cuánto tiempo una liquidez está visible desde que la app la observa
+filtrar liquidez por distancia al precio
+combinar DOM live con Order Flow histórico calculado desde trades
+```
+
+---
+
+# Qué datos sí usaremos del exchange
+
+```txt id="e5xwn4"
+Klines de Binance:
+- velas históricas
+- volumen por vela
+- estructura del precio
+
+AggTrades / Trades de Binance:
+- CVD histórico aproximado
+- Large Trades históricos
+- Delta por ventana
+- Volume Profile
+- Footprint básico futuro
+
+Depth / Deep Order Book de Binance:
+- DOM actual
+- liquidez profunda actual
+- Whale Orders activas ahora
+- liquidez cancelada solo desde que la app está abierta
+```
+
+---
+
+# Qué NO podemos prometer sin base de datos propia
+
+Sin una base de datos funcionando 24/7, no podemos prometer:
+
+```txt id="n46jcd"
+historial completo de Whale Orders de horas anteriores
+DOM histórico completo de ayer
+heatmap real de liquidez de sesiones pasadas
+replay completo del order book
+edad real total de una orden antes de abrir la app
+```
+
+La app solo puede decir:
+
+```txt id="75e0yl"
+observado desde que esta sesión está activa
+```
+
+No debe decir:
+
+```txt id="ujgmlf"
+esta orden lleva abierta X horas en Binance
+```
+
+si la app no la observó durante todo ese tiempo.
+
+---
+
+# Fase 17 — Exchange-Sourced Price History
+
+## Objetivo
+
+Cambiar el gráfico principal para que cargue velas históricas reales de Binance.
+
+El gráfico no debe depender solo de `pricePoints` generados desde que se abre la app.
+
+---
+
+## Problema actual
+
+El PriceChart actual usa velas sintéticas generadas por el feed live.
+
+Eso da poca información al trader porque, al abrir la página, no hay contexto suficiente.
+
+El trader necesita ver:
+
+```txt id="l0m5nt"
+máximos recientes
+mínimos recientes
+zonas de rechazo
+zonas de ruptura
+volumen por vela
+large trades sobre zonas reales
+whale orders cerca de niveles importantes
+```
+
+---
+
+## Decisión
+
+Usar Binance Klines para el gráfico histórico.
+
+Mantener separado:
+
+```txt id="3r1j0x"
+Klines -> gráfico de precio
+Trades / aggTrades -> Order Flow
+Depth -> DOM y liquidez
+```
+
+---
+
+## Tipos compartidos recomendados
+
+Agregar en `packages/shared/src/index.ts`:
+
+```ts id="ntpa4f"
+export type CandleInterval =
+  | "1s"
+  | "1m"
+  | "3m"
+  | "5m"
+  | "15m"
+  | "30m"
+  | "1h"
+  | "2h"
+  | "4h"
+  | "1d";
+
+export type MarketCandle = {
+  symbol: MarketSymbol;
+  exchange: Exchange;
+  interval: CandleInterval;
+  openTime: number;
+  closeTime: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  quoteVolume: number;
+  tradesCount: number;
+  takerBuyVolume: number;
+  takerBuyQuoteVolume: number;
+  isClosed: boolean;
+};
+```
+
+---
+
+## Nota sobre timeframes
+
+El proyecto ya tiene:
+
+```txt id="pbk0go"
+5s
+15s
+30s
+1m
+3m
+5m
+15m
+1h
+```
+
+Pero Binance no da todos esos intervalos como klines oficiales en todos los casos.
+
+Regla:
+
+```txt id="f3fpzf"
+1m, 3m, 5m, 15m, 1h -> usar klines oficiales.
+5s, 15s, 30s -> construir desde trades en memoria o mantener como modo sintético.
+```
+
+No eliminar los timeframes cortos.
+
+Solo diferenciar:
+
+```txt id="1qgj9m"
+official_candle
+synthetic_candle
+```
+
+---
+
+## Backend — Tareas
+
+Crear:
+
+```txt id="xjh0xt"
+apps/backend/src/exchanges/binance/BinanceKlineHistoryService.ts
+```
+
+Responsabilidades:
+
+```txt id="cm4336"
+consultar klines de Binance
+validar symbol
+validar interval
+validar limit
+normalizar respuesta a MarketCandle[]
+manejar errores sin tumbar el backend
+```
+
+Crear endpoint:
+
+```txt id="byc2t7"
+GET /api/market/candles?symbol=BTCUSDT&interval=1m&limit=500
+```
+
+Crear evento Socket.io futuro:
+
+```txt id="o0npxi"
+market:candle_update
+```
+
+Primera versión:
+
+```txt id="huoq5e"
+REST para historial
+PriceChart sigue actualizando live con el feed actual
+```
+
+Segunda versión:
+
+```txt id="1sdd3l"
+WebSocket kline para actualizar la vela actual
+```
+
+---
+
+## Frontend — Tareas
+
+Modificar `PriceChart`:
+
+```txt id="gy6o2k"
+al montar:
+- pedir historial al endpoint
+- pintar velas con setData
+
+al cambiar chartTimeframe:
+- limpiar velas anteriores
+- pedir nuevo historial si el timeframe es oficial
+- usar modo sintético si el timeframe es 5s, 15s o 30s
+
+mantener:
+- overlays de Whale Orders
+- markers de Large Trades
+- línea de CVD
+- botón reset chart
+```
+
+---
+
+## Criterios de aceptación
+
+```txt id="l9rekc"
+npm run typecheck pasa
+npm run build pasa
+El gráfico muestra historial real de BTCUSDT
+El gráfico ya no empieza vacío
+Al cambiar timeframe oficial se recarga historial
+Los overlays siguen funcionando
+Large Trades siguen apareciendo
+Whale Orders siguen apareciendo
+Tape sigue funcionando
+DOM sigue funcionando
+CVD sigue funcionando
+```
+
+---
+
+## Prompt para Codex
+
+```txt id="ppxb5v"
+Quiero implementar Exchange-Sourced Price History.
+
+Contexto:
+- El proyecto ya tiene PriceChart con overlays.
+- Ya existe chartTimeframe en Zustand.
+- El gráfico actual usa pricePoints sintéticos.
+- Quiero cargar velas históricas reales de Binance sin romper Order Flow.
+
+Objetivo:
+1. Crear tipos CandleInterval y MarketCandle en packages/shared/src/index.ts.
+2. Crear BinanceKlineHistoryService en apps/backend/src/exchanges/binance.
+3. Crear endpoint:
+   GET /api/market/candles?symbol=BTCUSDT&interval=1m&limit=500
+4. Normalizar klines de Binance a MarketCandle.
+5. Modificar PriceChart para cargar historial inicial.
+6. Usar setData para pintar velas reales.
+7. Al cambiar chartTimeframe:
+   - usar klines oficiales para 1m, 3m, 5m, 15m, 1h
+   - mantener modo sintético para 5s, 15s, 30s
+8. Mantener overlays de Whale Orders.
+9. Mantener markers de Large Trades.
+10. No tocar base de datos.
+11. No agregar IA.
+12. Mantener npm run typecheck y npm run build funcionando.
+
+Criterios:
+- El gráfico muestra historial real.
+- Los paneles actuales no se rompen.
+```
+
+---
+
+# Fase 18 — Exchange-Sourced AggTrades History
+
+## Objetivo
+
+Usar trades históricos/agregados del exchange para calcular Order Flow por ventana sin base de datos propia.
+
+---
+
+## Qué vamos a calcular desde aggTrades
+
+```txt id="ui7ivf"
+CVD histórico aproximado
+Large Trades históricos
+Delta por ventana
+Buy volume
+Sell volume
+Volume Profile básico
+Footprint básico futuro
+```
+
+---
+
+## Por qué es importante
+
+Si el usuario selecciona:
+
+```txt id="qaktvu"
+Analysis Window: 15m
+```
+
+la app debe intentar cargar datos reales de los últimos 15 minutos desde el exchange.
+
+Si selecciona:
+
+```txt id="urmmsx"
+Analysis Window: 1h
+```
+
+la app debe cargar y calcular contexto de la última hora.
+
+No depender de que el backend haya estado abierto durante esa hora.
+
+---
+
+## Tipos compartidos recomendados
+
+Agregar o reutilizar:
+
+```ts id="jfa1z2"
+export type HistoricalAggTrade = {
+  exchange: Exchange;
+  symbol: MarketSymbol;
+  aggregateTradeId: string;
+  price: number;
+  quantity: number;
+  firstTradeId: number;
+  lastTradeId: number;
+  timestamp: number;
+  side: "buy" | "sell";
+  notionalUsd: number;
+};
+```
+
+---
+
+## Backend — Tareas
+
+Crear:
+
+```txt id="jjz95q"
+apps/backend/src/exchanges/binance/BinanceAggTradesHistoryService.ts
+```
+
+Crear endpoint:
+
+```txt id="t07vzo"
+GET /api/market/agg-trades?symbol=BTCUSDT&window=15m
+```
+
+También permitir:
+
+```txt id="p5d219"
+GET /api/market/agg-trades?symbol=BTCUSDT&startTime=&endTime=
+```
+
+Responsabilidades:
+
+```txt id="7k0ff8"
+consultar Binance aggTrades
+normalizar precio y cantidad a number
+calcular side aproximado
+calcular notionalUsd
+limitar resultados para no saturar frontend
+```
+
+---
+
+## Frontend — Tareas
+
+Crear hook:
+
+```txt id="ehnuyv"
+useHistoricalAggTrades
+```
+
+Debe:
+
+```txt id="0vjkgx"
+cargar aggTrades cuando cambia analysisWindow
+guardar resultado en Zustand
+evitar múltiples fetch repetidos
+mostrar loading pequeño si está cargando
+mostrar error si falla
+```
+
+---
+
+## Criterios de aceptación
+
+```txt id="nzjcl5"
+npm run typecheck pasa
+npm run build pasa
+Al cambiar Analysis Window se cargan aggTrades históricos
+La app puede calcular CVD de ventana
+La app puede detectar Large Trades históricos
+La app no depende de base de datos
+No se rompe el Tape live
+No se rompe DOM live
+```
+
+---
+
+## Prompt para Codex
+
+```txt id="xf1u1q"
+Quiero implementar Exchange-Sourced AggTrades History para calcular Order Flow histórico sin base de datos propia.
+
+Contexto:
+- El proyecto usa AnalysisWindow.
+- No tendremos base de datos 24/7.
+- Queremos reconstruir contexto desde Binance cuando el usuario abre la app.
+- Tape live y DOM live deben seguir funcionando.
+
+Objetivo:
+1. Crear tipo HistoricalAggTrade en packages/shared/src/index.ts.
+2. Crear BinanceAggTradesHistoryService en backend.
+3. Crear endpoint:
+   GET /api/market/agg-trades?symbol=BTCUSDT&window=15m
+4. Permitir también startTime y endTime.
+5. Normalizar aggTrades a HistoricalAggTrade.
+6. Calcular notionalUsd.
+7. Crear hook frontend useHistoricalAggTrades.
+8. Cargar datos al cambiar analysisWindow.
+9. No guardar en base de datos.
+10. No romper socket live.
+
+Criterios:
+- npm run typecheck pasa.
+- npm run build pasa.
+- Los datos históricos se cargan bajo demanda.
+```
+
+---
+
+# Fase 19 — Historical CVD y Large Trades por Ventana
+
+## Objetivo
+
+Usar los aggTrades históricos para mostrar CVD y Large Trades de la ventana seleccionada.
+
+---
+
+## Qué debe pasar
+
+Cuando el usuario cambie:
+
+```txt id="aep6zj"
+Window: 5m
+Window: 15m
+Window: 1h
+Window: 4h
+```
+
+La app debe recalcular:
+
+```txt id="s7i8p0"
+CVD de esa ventana
+delta de esa ventana
+large trades de esa ventana
+buy volume
+sell volume
+```
+
+---
+
+## Frontend — Tareas
+
+Crear utilidades:
+
+```txt id="otsq45"
+calculateHistoricalCvd
+calculateHistoricalDelta
+detectHistoricalLargeTrades
+```
+
+Reglas:
+
+```txt id="tzj8sl"
+CVD = suma buy quantity - sell quantity
+Delta = buyVolume - sellVolume
+Large Trade = notionalUsd supera umbral configurado
+```
+
+Combinar:
+
+```txt id="ywur79"
+histórico cargado desde exchange
++
+eventos live recibidos desde que la app está abierta
+```
+
+Evitar duplicados por ID.
+
+---
+
+## UI
+
+Actualizar:
+
+```txt id="g8q88f"
+CVD Chart
+LargeTradesPanel
+MarketOverview
+futuro OrderFlowSummary
+```
+
+Mostrar etiqueta:
+
+```txt id="szikbx"
+Window data: exchange history + live session
+```
+
+---
+
+## Criterios de aceptación
+
+```txt id="7oi8np"
+npm run typecheck pasa
+npm run build pasa
+CVD cambia según Analysis Window
+LargeTradesPanel puede mostrar históricos de ventana
+Se diferencia live de histórico si hace falta
+No se duplican trades
+No se rompe socket live
+```
+
+---
+
+## Prompt para Codex
+
+```txt id="4wzyyo"
+Quiero calcular CVD y Large Trades por ventana usando aggTrades históricos del exchange.
+
+Contexto:
+- Ya existirá useHistoricalAggTrades.
+- Ya existen largeTrades live por Socket.io.
+- Ya existe AnalysisWindow.
+- No quiero base de datos.
+
+Objetivo:
+1. Crear utilidades:
+   - calculateHistoricalCvd
+   - calculateHistoricalDelta
+   - detectHistoricalLargeTrades
+2. Usar HistoricalAggTrade[].
+3. Calcular:
+   - buyVolume
+   - sellVolume
+   - delta
+   - cvd
+   - largeTrades
+4. Combinar datos históricos con live session sin duplicados.
+5. Actualizar CVD Chart y LargeTradesPanel si corresponde.
+6. Mostrar etiqueta indicando que la ventana usa exchange history + live session.
+7. Mantener npm run typecheck y npm run build funcionando.
+
+Criterios:
+- AnalysisWindow afecta los cálculos.
+- La app refleja contexto real del exchange.
+- No se rompe el flujo live.
+```
+
+---
+
+# Fase 20 — Deep Liquidity Context
+
+## Objetivo
+
+Mostrar liquidez más alejada del precio usando el Deep Order Book real del exchange.
+
+El trader debe poder ver no solo el DOM cercano, sino también zonas de liquidez más profundas.
+
+---
+
+## Nueva idea de producto
+
+Agregar un tercer selector:
+
+```txt id="gr84cx"
+Depth Range
+```
+
+Este selector no es temporalidad.
+
+Este selector define cuánto se aleja el DOM desde el precio actual.
+
+---
+
+## Opciones iniciales
+
+```txt id="z9rw8k"
+±0.25%
+±0.5%
+±1%
+±2%
+±5%
+```
+
+---
+
+## Tipos compartidos recomendados
+
+```ts id="zt3hzf"
+export type LiquidityDepthRange =
+  | "0.25%"
+  | "0.5%"
+  | "1%"
+  | "2%"
+  | "5%";
+
+export type DeepLiquidityLevel = WhaleLiquidityLevel & {
+  distanceFromPrice: number;
+  distancePercent: number;
+  ageSeconds: number;
+  zone: "near" | "mid" | "far";
+};
+```
+
+---
+
+## Backend — Tareas
+
+Actualizar `WhaleOrderEngine` o crear helper para calcular:
+
+```txt id="yv31mk"
+distanceFromPrice
+distancePercent
+ageSeconds
+zone
+```
+
+Reglas de zona:
+
+```txt id="y4qkx3"
+near = dentro de ±0.5%
+mid = entre ±0.5% y ±2%
+far = más de ±2%
+```
+
+No enviar todos los niveles profundos al frontend.
+
+Enviar solo:
+
+```txt id="30vhct"
+niveles relevantes
+whale orders
+niveles filtrados por threshold
+niveles ordenados por notionalUsd o distancia
+```
+
+---
+
+## Frontend — Tareas
+
+Agregar al store:
+
+```txt id="ft0nry"
+depthRange
+setDepthRange
+```
+
+Crear componente:
+
+```txt id="s6vl1z"
+DepthRangeSelector.tsx
+```
+
+Insertarlo en `MarketHeader` junto a:
+
+```txt id="9u3t1j"
+TimeframeSelector
+AnalysisWindowSelector
+```
+
+Actualizar `WhaleOrdersPanel` para mostrar:
+
+```txt id="1jddj3"
+price
+side
+quantity
+notionalUsd
+distancePercent
+ageSeconds
+status
+zone
+```
+
+Agregar filtros:
+
+```txt id="ik7xzi"
+near
+mid
+far
+active
+cancelled
+```
+
+---
+
+## Etiquetas correctas
+
+Usar:
+
+```txt id="7kwkja"
+Observed for
+First seen
+Last seen
+Distance from price
+```
+
+No usar:
+
+```txt id="o18yyv"
+Real exchange age
+Opened since
+```
+
+porque Binance no nos da la edad real total de la orden antes de observarla.
+
+---
+
+## Criterios de aceptación
+
+```txt id="b8djno"
+npm run typecheck pasa
+npm run build pasa
+Existe DepthRangeSelector
+WhaleOrdersPanel muestra distancia al precio
+WhaleOrdersPanel muestra tiempo observado
+Se pueden ver niveles más alejados
+No se envían miles de niveles al frontend
+DOM cercano sigue funcionando
+PriceChart overlays siguen funcionando
+```
+
+---
+
+## Prompt para Codex
+
+```txt id="tb8n0m"
+Quiero implementar Deep Liquidity Context.
+
+Contexto:
+- Ya existe BinanceDeepOrderBookConnector.
+- Ya existe WhaleOrderEngine.
+- Ya existe WhaleOrdersPanel.
+- Ya existen overlays de Whale Orders en PriceChart.
+- Quiero ver liquidez más alejada del precio y tiempo observado.
+- No quiero base de datos.
+
+Objetivo:
+1. Crear tipo LiquidityDepthRange en packages/shared/src/index.ts.
+2. Crear tipo DeepLiquidityLevel extendiendo WhaleLiquidityLevel.
+3. Agregar depthRange al Zustand store.
+4. Crear DepthRangeSelector con:
+   - 0.25%
+   - 0.5%
+   - 1%
+   - 2%
+   - 5%
+5. Insertar DepthRangeSelector en MarketHeader.
+6. Calcular distanceFromPrice, distancePercent, ageSeconds y zone.
+7. Actualizar WhaleOrdersPanel para mostrar:
+   - distancia al precio
+   - tiempo observado
+   - zona near/mid/far
+8. Filtrar niveles por depthRange.
+9. No afirmar edad real total de la orden.
+10. No enviar miles de niveles al frontend.
+11. Mantener npm run typecheck y npm run build funcionando.
+
+Criterios:
+- El usuario puede ampliar el rango de liquidez.
+- Se ve liquidez más alejada del precio.
+- Se ve cuánto tiempo lleva observada.
+- No se rompe DOM ni PriceChart.
+```
+
+---
+
+# Fase 21 — Order Flow Window Summary
+
+## Objetivo
+
+Crear un resumen de Order Flow por ventana usando:
+
+```txt id="un08pc"
+historial del exchange
++
+datos live desde que se abrió la app
++
+DOM profundo actual
+```
+
+---
+
+## Qué debe responder
+
+```txt id="bf8o1m"
+¿Qué está dominando en la ventana?
+¿Compras agresivas o ventas agresivas?
+¿Hay large trades relevantes?
+¿El CVD acompaña?
+¿Dónde está la liquidez importante?
+¿Está cerca o lejos del precio?
+¿Hay riesgo por liquidez retirada observada?
+```
+
+---
+
+## Tipo recomendado
+
+```ts id="i7ab60"
+export type MarketBias = "bullish" | "bearish" | "neutral" | "mixed";
+
+export type OrderFlowWindowSummary = {
+  symbol: MarketSymbol;
+  exchange: Exchange;
+  analysisWindow: AnalysisWindow;
+  buyVolume: number;
+  sellVolume: number;
+  delta: number;
+  cvd: number;
+  largeTradesCount: number;
+  largeTradesUsd: number;
+  activeBidLiquidityUsd: number;
+  activeAskLiquidityUsd: number;
+  nearestBidWhalePrice?: number;
+  nearestAskWhalePrice?: number;
+  dominantSide: "buy" | "sell" | "neutral";
+  marketBias: MarketBias;
+  message: string;
+  timestamp: number;
+};
+```
+
+---
+
+## Frontend — Tareas
+
+Crear:
+
+```txt id="z4uo72"
+OrderFlowWindowSummaryPanel.tsx
+```
+
+Mostrar cards:
+
+```txt id="td2m6a"
+Window
+Delta
+CVD
+Large Trades
+Bid Liquidity
+Ask Liquidity
+Nearest Bid Wall
+Nearest Ask Wall
+Bias
+```
+
+Mostrar frase prudente:
+
+```txt id="nx3nqb"
+Presión compradora en la ventana, pero existe liquidez ask relevante por encima.
+```
+
+o:
+
+```txt id="785pkp"
+Contexto mixto: CVD positivo, pero large trades vendedores aparecen cerca del precio.
+```
+
+---
+
+## Criterios de aceptación
+
+```txt id="rpn1gi"
+npm run typecheck pasa
+npm run build pasa
+El resumen cambia con AnalysisWindow
+Usa aggTrades históricos
+Usa live trades de la sesión
+Usa Whale Orders actuales
+No da señales de compra/venta
+No usa IA
+No usa base de datos
+```
+
+---
+
+## Prompt para Codex
+
+```txt id="covly0"
+Quiero crear OrderFlowWindowSummaryPanel usando datos del exchange y datos live, sin base de datos.
+
+Contexto:
+- Ya existirá HistoricalAggTrade.
+- Ya existe AnalysisWindow.
+- Ya existen largeTrades live y whaleOrders live.
+- Ya existirá Deep Liquidity Context.
+- No quiero IA.
+- No quiero señales de compra/venta.
+
+Objetivo:
+1. Crear tipos MarketBias y OrderFlowWindowSummary.
+2. Crear OrderFlowWindowSummaryPanel.tsx.
+3. Calcular:
+   - buyVolume
+   - sellVolume
+   - delta
+   - cvd
+   - largeTradesCount
+   - largeTradesUsd
+   - activeBidLiquidityUsd
+   - activeAskLiquidityUsd
+   - nearestBidWhalePrice
+   - nearestAskWhalePrice
+   - dominantSide
+   - marketBias
+   - message
+4. Usar AnalysisWindow.
+5. Combinar histórico del exchange con datos live sin duplicados.
+6. Usar Whale Orders actuales para liquidez.
+7. No decir compra o vende.
+8. Mantener npm run typecheck y npm run build funcionando.
+
+Criterios:
+- El panel resume el contexto de la ventana.
+- El usuario entiende el mercado más rápido.
+- No se rompe la UI actual.
+```
+
+---
+
+# Fase 22 — Volume Profile desde Exchange History
+
+## Objetivo
+
+Crear Volume Profile usando trades/aggTrades históricos del exchange.
+
+No depender de base de datos.
+
+---
+
+## Qué responde
+
+```txt id="tjuejy"
+¿Dónde se ejecutó más volumen en la ventana?
+¿Dónde está el POC?
+¿Dónde hubo más delta comprador?
+¿Dónde hubo más delta vendedor?
+```
+
+---
+
+## Tipo recomendado
+
+```ts id="yxx55d"
+export type VolumeProfileLevel = {
+  price: number;
+  buyVolume: number;
+  sellVolume: number;
+  totalVolume: number;
+  delta: number;
+  isPoc: boolean;
+};
+```
+
+---
+
+## Frontend — Tareas
+
+Crear:
+
+```txt id="salorv"
+VolumeProfilePanel.tsx
+```
+
+Usar:
+
+```txt id="w1fqs2"
+HistoricalAggTrade[]
+AnalysisWindow
+tickSize
+```
+
+Tick sizes:
+
+```txt id="jseph4"
+10
+25
+50
+100
+```
+
+Mostrar:
+
+```txt id="f6pt4o"
+price
+total volume
+buy volume
+sell volume
+delta
+POC
+```
+
+---
+
+## Criterios de aceptación
+
+```txt id="zvgswi"
+npm run typecheck pasa
+npm run build pasa
+Volume Profile usa datos del exchange
+Se recalcula con AnalysisWindow
+Se puede cambiar tickSize
+Se marca POC
+No se usa base de datos
+```
+
+---
+
+## Prompt para Codex
+
+```txt id="kqgkz6"
+Quiero crear Volume Profile usando aggTrades históricos del exchange.
+
+Contexto:
+- Ya existirá HistoricalAggTrade.
+- Ya existe AnalysisWindow.
+- No quiero base de datos.
+- No quiero hacer Footprint todavía.
+
+Objetivo:
+1. Crear tipo VolumeProfileLevel.
+2. Crear VolumeProfilePanel.tsx.
+3. Agrupar trades por price bucket.
+4. Calcular:
+   - buyVolume
+   - sellVolume
+   - totalVolume
+   - delta
+   - isPoc
+5. Crear selector de tickSize:
+   - 10
+   - 25
+   - 50
+   - 100
+6. Usar datos históricos del exchange y live session.
+7. No romper PriceChart ni Tape.
+8. Mantener npm run typecheck y npm run build funcionando.
+
+Criterios:
+- El Volume Profile se ve en la página.
+- Cambia con la ventana.
+- No depende de DB.
+```
+
+---
+
+# Fase 23 — Session Memory Local
+
+## Objetivo
+
+Guardar información temporal en el navegador sin base de datos.
+
+Esto permite que si el usuario recarga la página durante la misma sesión, no pierda todo.
+
+---
+
+## Tecnología recomendada
+
+```txt id="smv97u"
+IndexedDB
+```
+
+No usar localStorage para datos grandes.
+
+---
+
+## Qué guardar localmente
+
+```txt id="azpgwm"
+últimos summaries calculados
+últimos large trades detectados
+últimas whale orders observadas
+preferencias de usuario
+depthRange seleccionado
+analysisWindow seleccionado
+chartTimeframe seleccionado
+```
+
+---
+
+## Qué NO guardar
+
+```txt id="kgnbml"
+todos los ticks crudos
+todos los diff del order book
+miles de niveles cada 100ms
+datos sensibles
+```
+
+---
+
+## Criterios de aceptación
+
+```txt id="ytq15f"
+npm run typecheck pasa
+npm run build pasa
+IndexedDB guarda preferencias simples
+La app funciona aunque IndexedDB falle
+No se guardan datos masivos
+No se requiere login
+No se requiere backend
+```
+
+---
+
+## Prompt para Codex
+
+```txt id="rvm110"
+Quiero agregar Session Memory Local con IndexedDB.
+
+Contexto:
+- No queremos base de datos por ahora.
+- Queremos guardar preferencias y datos ligeros de sesión.
+- La app debe funcionar aunque IndexedDB falle.
+
+Objetivo:
+1. Crear helper apps/frontend/src/lib/sessionStorageDb.ts usando IndexedDB.
+2. Guardar:
+   - chartTimeframe
+   - analysisWindow
+   - depthRange
+   - últimos summaries ligeros
+3. No guardar ticks crudos.
+4. No guardar todo el DOM.
+5. Restaurar preferencias al abrir la app.
+6. Mantener npm run typecheck y npm run build funcionando.
+
+Criterios:
+- Las preferencias se recuerdan.
+- No se rompe la app si el navegador bloquea almacenamiento.
+```
+
+---
+
+# Orden correcto de implementación
+
+```txt id="ppclvt"
+17. Exchange-Sourced Price History
+18. Exchange-Sourced AggTrades History
+19. Historical CVD y Large Trades por ventana
+20. Deep Liquidity Context
+21. Order Flow Window Summary
+22. Volume Profile desde Exchange History
+23. Session Memory Local
+```
+
+---
+
+# Qué queda para cuando tengamos base de datos decente
+
+Cuando haya una base de datos estable y/o servidor funcionando más tiempo, se podrá agregar:
+
+```txt id="u3qr3y"
+persistencia real de Whale Orders
+historial propio de liquidez retirada
+heatmap histórico real
+replay de sesiones
+diario de trading
+backtesting
+IA de resumen
+multi-exchange
+```
+
+---
+
+# Regla final de esta etapa
+
+La app no debe intentar guardar todo.
+
+Debe reconstruir el contexto desde el exchange.
+
+Debe calcular lo necesario en memoria.
+
+Debe mostrar al trader contexto suficiente para leer el mercado.
+
+Orden mental:
+
+```txt id="j6cjbp"
+Exchange history
++
+Live order flow
++
+Deep liquidity context
++
+Window summary
+=
+herramienta útil sin base de datos propia
+```

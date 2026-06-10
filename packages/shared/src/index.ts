@@ -2,14 +2,16 @@ export type Exchange = "binance";
 export type MarketSymbol = "BTCUSDT";
 
 export type ChartTimeframe =
-  | "5s"
-  | "15s"
-  | "30s"
   | "1m"
   | "3m"
   | "5m"
   | "15m"
-  | "1h";
+  | "30m"
+  | "1h"
+  | "4h"
+  | "1d";
+
+export type CandleInterval = ChartTimeframe;
 
 export type AnalysisWindow =
   | "30s"
@@ -25,6 +27,20 @@ export type NormalizedTrade = {
   tradeId: string;
   price: number;
   quantity: number;
+  side: "buy" | "sell";
+  timestamp: number;
+};
+
+export type HistoricalAggTrade = {
+  id: string;
+  exchange: Exchange;
+  symbol: MarketSymbol;
+  aggregateTradeId: number;
+  firstTradeId: number;
+  lastTradeId: number;
+  price: number;
+  quantity: number;
+  notionalUsd: number;
   side: "buy" | "sell";
   timestamp: number;
 };
@@ -45,6 +61,19 @@ export type PricePoint = {
 export type CvdPoint = {
   time: number;
   value: number;
+};
+
+export type MarketCandle = {
+  exchange: Exchange;
+  symbol: MarketSymbol;
+  interval: CandleInterval;
+  openTime: number;
+  closeTime: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
 };
 
 export type MarketSnapshot = {

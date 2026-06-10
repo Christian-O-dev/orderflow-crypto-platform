@@ -1,6 +1,7 @@
 import type {
   AnalysisWindow,
   ChartTimeframe,
+  HistoricalAggTrade,
   LargeTradeEvent,
   MarketAlert,
   MarketSnapshot,
@@ -9,9 +10,11 @@ import type {
 import { create } from "zustand";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected";
+type HistoricalAggTradesStatus = "idle" | "loading" | "ready" | "error";
 const MAX_ALERTS = 100;
 const MAX_LARGE_TRADES = 100;
 const MAX_WHALE_ORDERS = 100;
+const MAX_HISTORICAL_AGG_TRADES = 5000;
 
 type MarketState = {
   connectionStatus: ConnectionStatus;
@@ -19,6 +22,9 @@ type MarketState = {
   alerts: MarketAlert[];
   largeTrades: LargeTradeEvent[];
   whaleOrders: WhaleLiquidityLevel[];
+  historicalAggTrades: HistoricalAggTrade[];
+  historicalAggTradesStatus: HistoricalAggTradesStatus;
+  historicalAggTradesError: string | null;
   chartTimeframe: ChartTimeframe;
   analysisWindow: AnalysisWindow;
   setConnectionStatus: (connectionStatus: ConnectionStatus) => void;
@@ -26,6 +32,9 @@ type MarketState = {
   addAlert: (alert: MarketAlert) => void;
   addLargeTrade: (largeTrade: LargeTradeEvent) => void;
   setWhaleOrders: (whaleOrders: WhaleLiquidityLevel[]) => void;
+  setHistoricalAggTradesLoading: () => void;
+  setHistoricalAggTrades: (trades: HistoricalAggTrade[]) => void;
+  setHistoricalAggTradesError: (error: string) => void;
   setChartTimeframe: (chartTimeframe: ChartTimeframe) => void;
   setAnalysisWindow: (analysisWindow: AnalysisWindow) => void;
 };
@@ -36,7 +45,10 @@ export const useMarketStore = create<MarketState>((set) => ({
   alerts: [],
   largeTrades: [],
   whaleOrders: [],
-  chartTimeframe: "5s",
+  historicalAggTrades: [],
+  historicalAggTradesStatus: "idle",
+  historicalAggTradesError: null,
+  chartTimeframe: "1m",
   analysisWindow: "1m",
   setConnectionStatus: (connectionStatus) =>
     set((state) =>
@@ -67,6 +79,23 @@ export const useMarketStore = create<MarketState>((set) => ({
       }
 
       return { whaleOrders: nextWhaleOrders };
+    }),
+  setHistoricalAggTradesLoading: () =>
+    set({
+      historicalAggTradesStatus: "loading",
+      historicalAggTradesError: null,
+    }),
+  setHistoricalAggTrades: (trades) =>
+    set({
+      historicalAggTrades: trades.slice(0, MAX_HISTORICAL_AGG_TRADES),
+      historicalAggTradesStatus: "ready",
+      historicalAggTradesError: null,
+    }),
+  setHistoricalAggTradesError: (error) =>
+    set({
+      historicalAggTrades: [],
+      historicalAggTradesStatus: "error",
+      historicalAggTradesError: error,
     }),
   setChartTimeframe: (chartTimeframe) =>
     set((state) =>
