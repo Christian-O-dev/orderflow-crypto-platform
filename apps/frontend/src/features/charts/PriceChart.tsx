@@ -9,6 +9,7 @@ import type {
   MarketCandle,
   PricePoint,
   WhaleLiquidityLevel,
+  LiquidityMapZone,
 } from "@orderflow/shared";
 import {
   CandlestickSeries,
@@ -20,6 +21,7 @@ import {
   type IPriceLine,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
+  type LineData,
   type SeriesMarker,
   type Time,
 } from "lightweight-charts";
@@ -61,12 +63,14 @@ export function PriceChart() {
   const cvdSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const tradeMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const liquidityLinesRef = useRef<IPriceLine[]>([]);
+  const heatmapLinesRef = useRef<IPriceLine[]>([]);
   const latestTimeRef = useRef<Time | null>(null);
   const latestCvdTimeRef = useRef<Time | null>(null);
   const priceDataKeyRef = useRef<string | null>(null);
   const [showWhaleOrders, setShowWhaleOrders] = useState(true);
   const [showCancelledOrders, setShowCancelledOrders] = useState(false);
   const [showLargeTrades, setShowLargeTrades] = useState(true);
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const [historicalCandles, setHistoricalCandles] = useState<MarketCandle[]>([]);
   const [historyStatus, setHistoryStatus] = useState<
     "synthetic" | "loading" | "exchange" | "error"
@@ -75,10 +79,20 @@ export function PriceChart() {
     (state) => state.snapshot?.pricePoints ?? EMPTY_PRICE_POINTS,
   );
   const windowOrderFlow = useWindowOrderFlow();
+const largeTrades = windowOrderFlow.largeTrades;
   const cvdPoints = windowOrderFlow.cvdPoints;
   const cvd = windowOrderFlow.cvd;
-  const largeTrades = windowOrderFlow.largeTrades;
+  const absoluteCvd = useMarketStore((state) => state.snapshot?.cvd ?? 0);
+  const absoluteCvdRef = useRef(absoluteCvd);
+  absoluteCvdRef.current = absoluteCvd;
+  const initialCvdRef = useRef(absoluteCvd);
+  const snapshotTimestamp = useMarketStore((state) => state.snapshot?.timestamp ?? 0);
   const whaleOrders = useMarketStore((state) => state.whaleOrders ?? EMPTY_WHALE_ORDERS);
+  const liquidityMapZonesByRes = useMarketStore((state) => state.liquidityMapZones);
+  const liquidityMapResolution = useMarketStore((state) => state.liquidityMapResolution);
+  const activeHeatmapZones = useMemo(() => {
+    return liquidityMapZonesByRes?.[liquidityMapResolution] ?? [];
+  }, [liquidityMapZonesByRes, liquidityMapResolution]);
   const lastPrice = useMarketStore((state) => state.snapshot?.lastPrice ?? 0);
   const depthRange = useMarketStore((state) => state.depthRange);
   const chartTimeframe = useMarketStore((state) => state.chartTimeframe);
@@ -140,6 +154,7 @@ export function PriceChart() {
         lineWidth: 2,
         priceLineColor: "rgba(34,211,238,0.35)",
         title: "CVD",
+        crosshairMarkerVisible: false,
       },
       1,
     );
@@ -162,6 +177,7 @@ export function PriceChart() {
     return () => {
       stopResizing();
       clearLiquidityLines();
+      clearHeatmapLines();
       tradeMarkersRef.current?.setMarkers([]);
       tradeMarkersRef.current = null;
       chart.remove();
@@ -204,6 +220,7 @@ export function PriceChart() {
 
         setHistoricalCandles(payload.candles);
         setHistoryStatus("exchange");
+        initialCvdRef.current = absoluteCvdRef.current;
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) {
@@ -291,13 +308,6 @@ export function PriceChart() {
     latestTimeRef.current = null;
     latestCvdTimeRef.current = null;
     priceDataKeyRef.current = null;
-
-    const cvdSeries = cvdSeriesRef.current;
-
-    if (cvdSeries) {
-      cvdSeries.setData(toCvdLineData(cvdPoints, MAX_CVD_POINTS, candleIntervalSeconds));
-    }
-
   }, [candleIntervalSeconds, usesExchangeHistory]);
 
   useEffect(() => {
@@ -307,21 +317,20 @@ export function PriceChart() {
       return;
     }
 
-    series.applyOptions({
-      color: cvd >= 0 ? "#34D399" : "#F87171",
-      priceLineColor:
-        cvd >= 0 ? "rgba(52,211,153,0.45)" : "rgba(248,113,113,0.45)",
-    });
-  }, [cvd]);
+    let data: LineData<Time>[] = [];
 
-  useEffect(() => {
-    const series = cvdSeriesRef.current;
-
-    if (!series) {
-      return;
+    if (hasExchangeHistoryForTimeframe && historicalCandles.length > 0) {
+      data = toExchangeCvdLineData(
+        historicalCandles,
+        chartTimeframe as CandleInterval,
+        initialCvdRef.current,
+        absoluteCvd,
+        snapshotTimestamp
+      );
+    } else {
+      data = toCvdLineData(cvdPoints, MAX_CVD_POINTS, candleIntervalSeconds);
     }
 
-    const data = toCvdLineData(cvdPoints, MAX_CVD_POINTS, candleIntervalSeconds);
     const latestPoint = data.at(-1);
 
     if (!latestPoint) {
@@ -330,14 +339,17 @@ export function PriceChart() {
       return;
     }
 
-    if (latestCvdTimeRef.current === null || latestCvdTimeRef.current !== latestPoint.time) {
-      series.setData(data);
-    } else {
-      series.update(latestPoint);
-    }
-
+    series.setData(data);
     latestCvdTimeRef.current = latestPoint.time;
-  }, [candleIntervalSeconds, cvdPoints]);
+  }, [
+    candleIntervalSeconds,
+    cvdPoints,
+    hasExchangeHistoryForTimeframe,
+    historicalCandles,
+    chartTimeframe,
+    absoluteCvd,
+    snapshotTimestamp
+  ]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -352,6 +364,20 @@ export function PriceChart() {
       createLiquidityPriceLines(series, band),
     );
   }, [liquidityBands, showWhaleOrders]);
+
+  useEffect(() => {
+    const series = seriesRef.current;
+
+    clearHeatmapLines();
+
+    if (!series || !showHeatmap || activeHeatmapZones.length === 0) {
+      return;
+    }
+
+    heatmapLinesRef.current = activeHeatmapZones
+      .filter((zone) => zone.status === "active" || zone.status === "weakened")
+      .flatMap((zone) => createHeatmapPriceLines(series, zone));
+  }, [activeHeatmapZones, showHeatmap]);
 
   useEffect(() => {
     const markersPlugin = tradeMarkersRef.current;
@@ -393,6 +419,11 @@ export function PriceChart() {
             label="Show Large Trades"
             onChange={setShowLargeTrades}
           />
+          <OverlayToggle
+            checked={showHeatmap}
+            label="Show Heatmap"
+            onChange={setShowHeatmap}
+          />
           <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-cyan-200">
             {chartTimeframe} candles
           </span>
@@ -432,6 +463,18 @@ export function PriceChart() {
     }
 
     liquidityLinesRef.current = [];
+  }
+
+  function clearHeatmapLines() {
+    const series = seriesRef.current;
+
+    if (series) {
+      for (const line of heatmapLinesRef.current) {
+        series.removePriceLine(line);
+      }
+    }
+
+    heatmapLinesRef.current = [];
   }
 }
 
@@ -554,6 +597,50 @@ function toCvdLineData(
     }));
 }
 
+function toExchangeCvdLineData(
+  candles: MarketCandle[],
+  interval: CandleInterval,
+  initialCvd: number,
+  currentCvd: number,
+  lastPriceTime: number
+): LineData<Time>[] {
+  const chartCandles = candles
+    .filter((candle) => candle.interval === interval)
+    .sort((a, b) => a.openTime - b.openTime);
+
+  let cumulativeCvd = 0;
+  const data: LineData<Time>[] = [];
+
+  for (const candle of chartCandles) {
+    const buyVolume = candle.takerBuyBaseVolume;
+    const sellVolume = candle.volume - buyVolume;
+    const delta = buyVolume - sellVolume;
+    cumulativeCvd += delta;
+    
+    data.push({
+      time: Math.floor(candle.openTime / 1000) as Time,
+      value: cumulativeCvd,
+    });
+  }
+
+  if (data.length > 0 && lastPriceTime > 0) {
+    const lastTime = data[data.length - 1].time as number;
+    const newTime = Math.floor(lastPriceTime / 1000);
+    const liveDelta = currentCvd - initialCvd;
+    
+    if (newTime > lastTime) {
+      data.push({
+        time: newTime as Time,
+        value: cumulativeCvd + liveDelta,
+      });
+    } else {
+      data[data.length - 1].value += liveDelta;
+    }
+  }
+
+  return data;
+}
+
 function toChartLiquidityBands(
   whaleOrders: WhaleLiquidityLevel[],
   includeCancelled: boolean,
@@ -642,6 +729,53 @@ function createLiquidityPriceLines(
   });
 
   return [mainLine, edgeLine];
+}
+
+function createHeatmapPriceLines(
+  series: ISeriesApi<"Candlestick">,
+  zone: LiquidityMapZone,
+) {
+  const isAsk = zone.side === "ask";
+  const alpha = Math.max(0.1, Math.min(0.8, zone.intensity * 0.8));
+  
+  const color = isAsk
+    ? `rgba(248, 113, 113, ${alpha})`
+    : `rgba(52, 211, 153, ${alpha})`;
+    
+  const edgeColor = isAsk
+    ? `rgba(248, 113, 113, 0.4)`
+    : `rgba(52, 211, 153, 0.4)`;
+
+  const title = `${zone.side.toUpperCase()} ${formatCompactUsd(zone.notionalUsd)}`;
+
+  const mainLine = series.createPriceLine({
+    price: zone.priceMid,
+    color,
+    lineWidth: 4,
+    lineStyle: LineStyle.Solid,
+    axisLabelVisible: true,
+    title,
+  });
+
+  const topEdge = series.createPriceLine({
+    price: Math.max(zone.priceStart, zone.priceEnd),
+    color: edgeColor,
+    lineWidth: 1,
+    lineStyle: LineStyle.Dotted,
+    axisLabelVisible: false,
+    title: "",
+  });
+
+  const bottomEdge = series.createPriceLine({
+    price: Math.min(zone.priceStart, zone.priceEnd),
+    color: edgeColor,
+    lineWidth: 1,
+    lineStyle: LineStyle.Dotted,
+    axisLabelVisible: false,
+    title: "",
+  });
+
+  return [topEdge, mainLine, bottomEdge];
 }
 
 function toSeriesMarkers(

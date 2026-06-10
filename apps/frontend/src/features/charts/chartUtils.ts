@@ -1,5 +1,6 @@
 import {
   ColorType,
+  CrosshairMode,
   createChart,
   LineSeries,
   type IChartApi,
@@ -81,6 +82,7 @@ export function createTerminalChart({
       pinch: true,
     },
     crosshair: {
+      mode: CrosshairMode.Normal,
       vertLine: { color: crosshairColor },
       horzLine: { color: crosshairColor },
     },

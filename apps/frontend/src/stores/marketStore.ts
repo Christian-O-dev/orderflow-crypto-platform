@@ -8,6 +8,9 @@ import type {
   MarketSnapshot,
   NormalizedTrade,
   WhaleLiquidityLevel,
+  LiquidityMapZone,
+  LiquidityMapResolution,
+  LiquidityMapZonesByResolution,
 } from "@orderflow/shared";
 import { create } from "zustand";
 import {
@@ -32,6 +35,8 @@ type MarketState = {
   alerts: MarketAlert[];
   largeTrades: LargeTradeEvent[];
   whaleOrders: WhaleLiquidityLevel[];
+  liquidityMapZones: LiquidityMapZonesByResolution;
+  liquidityMapResolution: LiquidityMapResolution;
   historicalAggTrades: HistoricalAggTrade[];
   historicalAggTradesStatus: HistoricalAggTradesStatus;
   historicalAggTradesError: string | null;
@@ -43,6 +48,8 @@ type MarketState = {
   addAlert: (alert: MarketAlert) => void;
   addLargeTrade: (largeTrade: LargeTradeEvent) => void;
   setWhaleOrders: (whaleOrders: WhaleLiquidityLevel[]) => void;
+  setLiquidityMapZones: (zonesByRes: LiquidityMapZonesByResolution) => void;
+  setLiquidityMapResolution: (res: LiquidityMapResolution) => void;
   setHistoricalAggTradesLoading: () => void;
   setHistoricalAggTrades: (trades: HistoricalAggTrade[]) => void;
   setHistoricalAggTradesError: (error: string) => void;
@@ -59,6 +66,8 @@ export const useMarketStore = create<MarketState>((set) => ({
   alerts: [],
   largeTrades: [],
   whaleOrders: [],
+  liquidityMapZones: { "100": [], "500": [], "2000": [] },
+  liquidityMapResolution: "100",
   historicalAggTrades: [],
   historicalAggTradesStatus: "idle",
   historicalAggTradesError: null,
@@ -118,6 +127,24 @@ export const useMarketStore = create<MarketState>((set) => ({
 
       return { whaleOrders: nextWhaleOrders };
     }),
+  setLiquidityMapZones: (zonesByRes) =>
+    set((state) => {
+      const currentSignature =
+        getLiquidityMapSignature(state.liquidityMapZones["100"]) +
+        getLiquidityMapSignature(state.liquidityMapZones["500"]) +
+        getLiquidityMapSignature(state.liquidityMapZones["2000"]);
+      const nextSignature =
+        getLiquidityMapSignature(zonesByRes["100"]) +
+        getLiquidityMapSignature(zonesByRes["500"]) +
+        getLiquidityMapSignature(zonesByRes["2000"]);
+
+      if (currentSignature === nextSignature) {
+        return state;
+      }
+
+      return { liquidityMapZones: zonesByRes };
+    }),
+  setLiquidityMapResolution: (res) => set({ liquidityMapResolution: res }),
   setHistoricalAggTradesLoading: () =>
     set({
       historicalAggTradesStatus: "loading",
@@ -231,6 +258,20 @@ function getWhaleOrdersSignature(whaleOrders: WhaleLiquidityLevel[]) {
         level.quantity.toFixed(8),
         level.durationMs,
         Math.round(level.notionalUsd),
+      ].join(":"),
+    )
+    .join("|");
+}
+
+function getLiquidityMapSignature(zones: LiquidityMapZone[]) {
+  return zones
+    .map((zone) =>
+      [
+        zone.id,
+        zone.status,
+        zone.quantity.toFixed(8),
+        zone.durationMs,
+        Math.round(zone.notionalUsd),
       ].join(":"),
     )
     .join("|");

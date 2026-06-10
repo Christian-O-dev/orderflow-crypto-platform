@@ -4,6 +4,7 @@ import {
   type MarketAlert,
   type MarketSnapshot,
   type WhaleLiquidityLevel,
+  type LiquidityMapZonesByResolution,
 } from "@orderflow/shared";
 import { io } from "socket.io-client";
 import { useMarketStore } from "../stores/marketStore";
@@ -88,6 +89,10 @@ function getMarketSocket() {
 
   socket.on(SOCKET_EVENTS.MARKET_WHALE_ORDERS, (whaleOrders: WhaleLiquidityLevel[]) => {
     useMarketStore.getState().setWhaleOrders(whaleOrders);
+  });
+
+  socket.on(SOCKET_EVENTS.MARKET_LIQUIDITY_MAP, (zones: LiquidityMapZonesByResolution) => {
+    useMarketStore.getState().setLiquidityMapZones(zones);
   });
 
   return socket;

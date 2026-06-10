@@ -89,10 +89,14 @@ export class WhaleOrderEngine {
   }) {
     const key = this.getLevelKey(side, price);
     const currentLevel = this.levels.get(key);
-    const activeLevel = currentLevel?.status === "active" ? currentLevel : undefined;
+    const isActive = currentLevel?.status === "active";
+    const activeLevel = isActive ? currentLevel : undefined;
     const notionalUsd = price * quantity;
+    
+    // Histéresis: si ya era "active", requiere que caiga por debajo del 75% del umbral para dejar de serlo
+    const effectiveThreshold = isActive ? this.thresholdUsd * 0.75 : this.thresholdUsd;
 
-    if (notionalUsd >= this.thresholdUsd) {
+    if (notionalUsd >= effectiveThreshold) {
       seenKeys.add(key);
       this.levels.set(key, {
         id: this.getLevelId(side, price),
@@ -110,7 +114,7 @@ export class WhaleOrderEngine {
       return;
     }
 
-    if (!currentLevel || currentLevel.status !== "active") {
+    if (!currentLevel || (!isActive && currentLevel.status !== "partially_removed")) {
       return;
     }
 

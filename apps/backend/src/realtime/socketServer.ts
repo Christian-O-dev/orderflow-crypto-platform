@@ -8,6 +8,7 @@ import { MarketEngine } from "../market-engine/MarketEngine.js";
 import { MockMarketEngine } from "../market-engine/MockMarketEngine.js";
 import { SignalEngine } from "../signal-engine/SignalEngine.js";
 import { WhaleOrderEngine } from "../whale-engine/WhaleOrderEngine.js";
+import { LiquidityMapEngine } from "../liquidity-map/LiquidityMapEngine.js";
 import type { Database } from "../database/index.js";
 import { MARKET_CONFIG } from "../config/marketConfig.js";
 
@@ -32,14 +33,36 @@ export function createRealtimeServer(
   const mockMarketEngine = new MockMarketEngine();
   const signalEngine = new SignalEngine();
   const whaleOrderEngine = new WhaleOrderEngine();
+  const liquidityMapEngine100 = new LiquidityMapEngine({
+    bucketUsd: MARKET_CONFIG.liquidityMap.resolutions["100"].bucketUsd,
+    zoneThresholdUsd: MARKET_CONFIG.liquidityMap.resolutions["100"].zoneThresholdUsd,
+    maxZones: MARKET_CONFIG.liquidityMap.maxZones,
+  });
+  const liquidityMapEngine500 = new LiquidityMapEngine({
+    bucketUsd: MARKET_CONFIG.liquidityMap.resolutions["500"].bucketUsd,
+    zoneThresholdUsd: MARKET_CONFIG.liquidityMap.resolutions["500"].zoneThresholdUsd,
+    maxZones: MARKET_CONFIG.liquidityMap.maxZones,
+  });
+  const liquidityMapEngine2000 = new LiquidityMapEngine({
+    bucketUsd: MARKET_CONFIG.liquidityMap.resolutions["2000"].bucketUsd,
+    zoneThresholdUsd: MARKET_CONFIG.liquidityMap.resolutions["2000"].zoneThresholdUsd,
+    maxZones: MARKET_CONFIG.liquidityMap.maxZones,
+  });
   let useMockFallback = process.env.MARKET_DATA_MODE === "mock";
   let useDepthFallback = false;
   let lastRealTradeAt = Date.now();
   let lastPersistedAt = 0;
   let lastWhaleOrdersEmittedAt = 0;
   let lastWhaleOrdersSignature = "";
+  let lastLiquidityMapEmittedAt = 0;
+  let lastLiquidityMapSignature = "";
   let largeTradesEmittedSinceLog = 0;
   let latestWhaleOrders = whaleOrderEngine.getLevels();
+  let latestLiquidityMapZonesByResolution = {
+    "100": liquidityMapEngine100.getZones(),
+    "500": liquidityMapEngine500.getZones(),
+    "2000": liquidityMapEngine2000.getZones(),
+  };
 
   io.on("connection", (socket) => {
     socket.emit(SOCKET_EVENTS.MARKET_SNAPSHOT, getCurrentSnapshot());
@@ -47,6 +70,7 @@ export function createRealtimeServer(
       SOCKET_EVENTS.MARKET_WHALE_ORDERS,
       latestWhaleOrders.slice(0, MARKET_CONFIG.frontendLimits.maxWhaleOrders),
     );
+    socket.emit(SOCKET_EVENTS.MARKET_LIQUIDITY_MAP, getActiveLiquidityMapZonesByResolution());
   });
 
   signalEngine.onAlert((alert) => {
@@ -83,6 +107,7 @@ export function createRealtimeServer(
       marketEngine.updateOrderBook(orderBook);
       signalEngine.processOrderBook(orderBook);
       latestWhaleOrders = whaleOrderEngine.processOrderBook(orderBook);
+      // Liquidity map requires deep depth, fallback only has 20 levels.
     },
     onStatusChange: (status) => {
       logStatusChange("Binance depth20 fallback", status);
@@ -97,6 +122,12 @@ export function createRealtimeServer(
       marketEngine.updateOrderBook(topLevels);
       signalEngine.processOrderBook(topLevels);
       latestWhaleOrders = whaleOrderEngine.processOrderBook(deepLevels, eventTime);
+      const lastPrice = marketEngine.getSnapshot().lastPrice;
+      latestLiquidityMapZonesByResolution = {
+        "100": liquidityMapEngine100.processOrderBook(deepLevels, lastPrice, MARKET_CONFIG.exchange, MARKET_CONFIG.symbol, eventTime),
+        "500": liquidityMapEngine500.processOrderBook(deepLevels, lastPrice, MARKET_CONFIG.exchange, MARKET_CONFIG.symbol, eventTime),
+        "2000": liquidityMapEngine2000.processOrderBook(deepLevels, lastPrice, MARKET_CONFIG.exchange, MARKET_CONFIG.symbol, eventTime),
+      };
     },
     onStatusChange: (status) => {
       logStatusChange("Binance deep depth", status);
@@ -117,6 +148,7 @@ export function createRealtimeServer(
 
     io.emit(SOCKET_EVENTS.MARKET_SNAPSHOT, snapshot);
     emitWhaleOrdersIfNeeded();
+    emitLiquidityMapIfNeeded();
 
     if (Date.now() - lastPersistedAt >= realtime.persistenceIntervalMs) {
       lastPersistedAt = Date.now();
@@ -130,6 +162,9 @@ export function createRealtimeServer(
     const activeWhaleOrders = latestWhaleOrders.filter(
       (level) => level.status === "active",
     ).length;
+    const activeLiquidityZones = latestLiquidityMapZonesByResolution["100"].filter(
+      (zone) => zone.status === "active",
+    ).length;
 
     console.log(
       [
@@ -137,6 +172,7 @@ export function createRealtimeServer(
         `clients=${io.engine.clientsCount}`,
         `fallback=${useMockFallback ? "mock" : useDepthFallback ? "depth20" : "live"}`,
         `whales=${activeWhaleOrders}/${latestWhaleOrders.length}`,
+        `liqMap=${activeLiquidityZones}/${latestLiquidityMapZonesByResolution["100"].length} (res 100)`,
         `largeTrades=${largeTradesEmittedSinceLog}`,
       ].join(" "),
     );
@@ -182,6 +218,11 @@ export function createRealtimeServer(
         snapshot.orderBook,
         snapshot.timestamp,
       );
+      latestLiquidityMapZonesByResolution = {
+        "100": liquidityMapEngine100.processOrderBook(snapshot.orderBook, snapshot.lastPrice, MARKET_CONFIG.exchange, MARKET_CONFIG.symbol, snapshot.timestamp),
+        "500": liquidityMapEngine500.processOrderBook(snapshot.orderBook, snapshot.lastPrice, MARKET_CONFIG.exchange, MARKET_CONFIG.symbol, snapshot.timestamp),
+        "2000": liquidityMapEngine2000.processOrderBook(snapshot.orderBook, snapshot.lastPrice, MARKET_CONFIG.exchange, MARKET_CONFIG.symbol, snapshot.timestamp),
+      };
       return snapshot;
     }
 
@@ -205,6 +246,35 @@ export function createRealtimeServer(
       SOCKET_EVENTS.MARKET_WHALE_ORDERS,
       latestWhaleOrders.slice(0, MARKET_CONFIG.frontendLimits.maxWhaleOrders),
     );
+  }
+
+  function getActiveLiquidityMapZonesByResolution() {
+    return {
+      "100": latestLiquidityMapZonesByResolution["100"].filter((z) => z.status === "active").slice(0, 100),
+      "500": latestLiquidityMapZonesByResolution["500"].filter((z) => z.status === "active").slice(0, 100),
+      "2000": latestLiquidityMapZonesByResolution["2000"].filter((z) => z.status === "active").slice(0, 100),
+    };
+  }
+
+  function emitLiquidityMapIfNeeded() {
+    const now = Date.now();
+    const activeZonesByResolution = getActiveLiquidityMapZonesByResolution();
+    const signature =
+      createLiquidityMapSignature(activeZonesByResolution["100"]) +
+      createLiquidityMapSignature(activeZonesByResolution["500"]) +
+      createLiquidityMapSignature(activeZonesByResolution["2000"]);
+    const signatureChanged = signature !== lastLiquidityMapSignature;
+    // We can use same interval as whale orders for simplicity
+    const shouldRefreshDurations =
+      now - lastLiquidityMapEmittedAt >= realtime.whaleOrdersEmitIntervalMs;
+
+    if (!signatureChanged && !shouldRefreshDurations) {
+      return;
+    }
+
+    lastLiquidityMapSignature = signature;
+    lastLiquidityMapEmittedAt = now;
+    io.emit(SOCKET_EVENTS.MARKET_LIQUIDITY_MAP, activeZonesByResolution);
   }
 }
 
@@ -234,3 +304,19 @@ function createWhaleOrdersSignature(
     )
     .join("|");
 }
+
+function createLiquidityMapSignature(
+  zones: ReturnType<LiquidityMapEngine["getZones"]>,
+) {
+  return zones
+    .map((zone) =>
+      [
+        zone.id,
+        zone.status,
+        zone.quantity.toFixed(8),
+        Math.round(zone.notionalUsd),
+      ].join(":"),
+    )
+    .join("|");
+}
+

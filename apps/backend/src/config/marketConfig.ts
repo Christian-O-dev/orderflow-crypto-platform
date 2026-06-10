@@ -39,16 +39,25 @@ export const MARKET_CONFIG = {
     liquidityWallThreshold: readNumberEnv("LIQUIDITY_WALL_THRESHOLD", 8),
   },
   whaleOrders: {
-    thresholdUsd: readNumberEnv("WHALE_ORDER_THRESHOLD_USD", 1_000_000),
+    thresholdUsd: readNumberEnv("WHALE_ORDER_THRESHOLD_USD", 500_000),
     maxTrackedLevels: readNumberEnv("MAX_TRACKED_WHALE_LEVELS", 500),
+  },
+  liquidityMap: {
+    maxZones: readNumberEnv("LIQUIDITY_MAP_MAX_ZONES", 80),
+    emitIntervalMs: readNumberEnv("LIQUIDITY_MAP_EMIT_INTERVAL_MS", 1_000),
+    resolutions: {
+      "100": { bucketUsd: 100, zoneThresholdUsd: 2_000_000 },
+      "500": { bucketUsd: 500, zoneThresholdUsd: 5_000_000 },
+      "2000": { bucketUsd: 2000, zoneThresholdUsd: 10_000_000 },
+    },
   },
   binance: {
     reconnectDelayMs: readNumberEnv("BINANCE_RECONNECT_DELAY_MS", 2_500),
     deepResyncDelayMs: readNumberEnv("BINANCE_DEEP_RESYNC_DELAY_MS", 1_000),
     snapshotTimeoutMs: readNumberEnv("BINANCE_SNAPSHOT_TIMEOUT_MS", 5_000),
     maxBufferedDepthEvents: readNumberEnv("BINANCE_MAX_BUFFERED_DEPTH_EVENTS", 1_000),
-    topLevels: readNumberEnv("BINANCE_TOP_LEVELS", 20),
-    maxDeepLevels: readNumberEnv("BINANCE_MAX_DEEP_LEVELS", 1_000),
+    topLevels: readNumberEnv("BINANCE_TOP_LEVELS", 50),
+    maxDeepLevels: readNumberEnv("BINANCE_MAX_DEEP_LEVELS", 50_000),
     depthFallbackLevels: readNumberEnv("BINANCE_DEPTH_FALLBACK_LEVELS", 20),
   },
   frontendLimits: {

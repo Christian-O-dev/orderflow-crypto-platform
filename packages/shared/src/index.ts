@@ -76,6 +76,7 @@ export type MarketCandle = {
   low: number;
   close: number;
   volume: number;
+  takerBuyBaseVolume: number;
 };
 
 export type MarketSnapshot = {
@@ -134,6 +135,29 @@ export type DeepLiquidityLevel = WhaleLiquidityLevel & {
   zone: "near" | "mid" | "far";
 };
 
+export type LiquidityMapZone = {
+  id: string;
+  exchange: Exchange;
+  symbol: MarketSymbol;
+  side: "bid" | "ask";
+  priceStart: number;
+  priceEnd: number;
+  priceMid: number;
+  quantity: number;
+  notionalUsd: number;
+  distanceFromPrice: number;
+  distancePercent: number;
+  intensity: number;
+  levelCount: number;
+  firstSeen: number;
+  lastSeen: number;
+  durationMs: number;
+  status: "active" | "weakened" | "removed";
+};
+
+export type LiquidityMapResolution = "100" | "500" | "2000";
+export type LiquidityMapZonesByResolution = Record<LiquidityMapResolution, LiquidityMapZone[]>;
+
 export type ChartLiquidityBand = {
   id: string;
   side: "bid" | "ask";
@@ -160,4 +184,5 @@ export const SOCKET_EVENTS = {
   MARKET_ALERT: "market:alert",
   MARKET_LARGE_TRADE: "market:large_trade",
   MARKET_WHALE_ORDERS: "market:whale_orders",
+  MARKET_LIQUIDITY_MAP: "market:liquidity_map",
 } as const;

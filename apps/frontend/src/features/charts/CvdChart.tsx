@@ -102,7 +102,7 @@ export function CvdChart() {
       series.setData(data);
       chartRef.current?.timeScale().fitContent();
     } else {
-      series.update(latestPoint);
+      series.setData(data);
     }
 
     latestTimeRef.current = latestPoint.time;

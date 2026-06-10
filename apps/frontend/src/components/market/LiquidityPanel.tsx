@@ -2,12 +2,14 @@ import clsx from "clsx";
 import { useState } from "react";
 import { DomTable } from "./DomTable";
 import { WhaleOrdersPanel } from "./WhaleOrdersPanel";
+import { LiquidityMapPanel } from "./LiquidityMapPanel";
 
-type LiquidityView = "dom" | "whale_orders";
+type LiquidityView = "dom" | "whale_orders" | "liquidity_map";
 
 const views: Array<{ id: LiquidityView; label: string }> = [
   { id: "dom", label: "DOM" },
   { id: "whale_orders", label: "Whale Orders" },
+  { id: "liquidity_map", label: "Liquidity Map" },
 ];
 
 export function LiquidityPanel() {
@@ -23,8 +25,10 @@ export function LiquidityPanel() {
             </h2>
             <p className="mt-0.5 text-[10px] text-[#6B7280]">
               {activeView === "dom"
-                ? "DOM actual - Binance BTCUSDT depth20"
-                : "Active whale limit buys/sells del exchange"}
+                ? "DOM actual - Binance BTCUSDT depth50"
+                : activeView === "whale_orders"
+                  ? "Active whale limit buys/sells del exchange"
+                  : "Zonas acumuladas de liquidez (Orderbook Heatmap)"}
             </p>
           </div>
 
@@ -48,7 +52,13 @@ export function LiquidityPanel() {
         </div>
       </div>
 
-      {activeView === "dom" ? <DomTable framed={false} /> : <WhaleOrdersPanel />}
+      {activeView === "dom" ? (
+        <DomTable framed={false} />
+      ) : activeView === "whale_orders" ? (
+        <WhaleOrdersPanel />
+      ) : (
+        <LiquidityMapPanel />
+      )}
     </section>
   );
 }

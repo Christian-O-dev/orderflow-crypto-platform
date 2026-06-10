@@ -2,7 +2,7 @@ import type { OrderBookLevel } from "@orderflow/shared";
 import { useMarketStore } from "../../stores/marketStore";
 
 const EMPTY_ORDER_BOOK: OrderBookLevel[] = [];
-const MAX_DOM_LEVELS = 20;
+const MAX_DOM_LEVELS = 50;
 
 const priceFormat = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
@@ -44,7 +44,7 @@ export function DomTable({ framed = true }: DomTableProps) {
             DOM
           </h2>
           <p className="mt-0.5 text-[10px] text-[#6B7280]">
-            DOM actual - Binance BTCUSDT depth20
+            DOM actual - Binance BTCUSDT depth50
           </p>
         </div>
       )}

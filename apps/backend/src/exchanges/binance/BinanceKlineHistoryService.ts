@@ -91,6 +91,7 @@ function normalizeBinanceKline(
     close: Number(kline[4]),
     volume: Number(kline[5]),
     closeTime: kline[6],
+    takerBuyBaseVolume: Number(kline[9]),
   };
 }
 
