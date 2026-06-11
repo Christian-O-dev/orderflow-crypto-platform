@@ -21,9 +21,7 @@ const usdFormat = new Intl.NumberFormat("en-US", {
 export function LargeTradesPanel() {
   const chartOrderFlow = useChartOrderFlow();
   const largeTrades = chartOrderFlow.largeTrades;
-  const historicalAggTradesStatus = useMarketStore(
-    (state) => state.historicalAggTradesStatus,
-  );
+
 
   return (
     <section className="flex min-h-[220px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/20 lg:h-full lg:min-h-0">
