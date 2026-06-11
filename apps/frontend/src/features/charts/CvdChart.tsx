@@ -5,7 +5,7 @@ import {
   type Time,
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
-import { useWindowOrderFlow } from "../orderflow/useWindowOrderFlow";
+import { useChartOrderFlow } from "../orderflow/useWindowOrderFlow";
 import { useMarketStore } from "../../stores/marketStore";
 import {
   createTerminalLineChart,
@@ -21,8 +21,8 @@ export function CvdChart() {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const latestTimeRef = useRef<Time | null>(null);
-  const analysisWindow = useMarketStore((state) => state.analysisWindow);
-  const windowOrderFlow = useWindowOrderFlow();
+  const chartTimeframe = useMarketStore((state) => state.chartTimeframe);
+  const windowOrderFlow = useChartOrderFlow();
   const cvdPoints: CvdPoint[] = windowOrderFlow.cvdPoints;
   const cvd = windowOrderFlow.cvd;
   const pressureLabel = cvd >= 0 ? "Compradora" : "Vendedora";
@@ -116,7 +116,7 @@ export function CvdChart() {
             CVD Chart
           </h2>
           <p className="mt-0.5 text-[10px] text-[#6B7280]">
-            Ventana {analysisWindow}: exchange history + live session
+            Temporalidad del Gráfico ({chartTimeframe})
           </p>
         </div>
         <span

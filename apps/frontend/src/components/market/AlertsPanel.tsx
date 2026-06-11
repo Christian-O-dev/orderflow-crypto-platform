@@ -35,40 +35,32 @@ export function AlertsPanel() {
 
   return (
     <section 
-      className="flex min-h-[150px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 lg:h-full lg:min-h-0"
+      className="flex h-full flex-col overflow-hidden border border-white/10 bg-[#111827]/90"
       onMouseEnter={markAllAlertsAsRead} // Mark read when interacting
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-[#0B0E14]/70 px-2 py-1">
-        <div>
-          <h2 className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#E5E7EB] flex items-center gap-2">
+      <div className="flex items-center justify-between border-b border-white/10 bg-[#0B0E14]/70 px-2 py-1">
+        <div className="flex items-center gap-2">
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#E5E7EB]">
             Alerts
-            <button 
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className={`text-[12px] hover:scale-110 transition-transform ${soundEnabled ? 'text-cyan-400' : 'text-gray-500 opacity-50'}`}
-              title={soundEnabled ? "Desactivar sonido" : "Activar sonido"}
-            >
-              {soundEnabled ? "🔊" : "🔇"}
-            </button>
           </h2>
-          <div className="flex gap-1 mt-1">
-            <FilterButton current={filter} value="all" label="All" onClick={() => setFilter("all")} />
-            <FilterButton current={filter} value="high" label="High" onClick={() => setFilter("high")} />
-            <FilterButton current={filter} value="medium" label="Med" onClick={() => setFilter("medium")} />
-            <FilterButton current={filter} value="low" label="Low" onClick={() => setFilter("low")} />
-          </div>
+          <FilterDropdown filter={filter} setFilter={setFilter} />
         </div>
-        <span className="rounded-full border border-white/10 px-1.5 py-0.5 font-mono text-[8px] uppercase text-[#9CA3AF]">
-          {filteredAlerts.length} total
-        </span>
+        <button 
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          className={`text-[12px] hover:scale-110 transition-transform ${soundEnabled ? 'text-cyan-400' : 'text-gray-500 opacity-50'}`}
+          title={soundEnabled ? "Desactivar sonido" : "Activar sonido"}
+        >
+          {soundEnabled ? "🔊" : "🔇"}
+        </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-1.5">
         {latestAlerts.length === 0 ? (
-          <div className="grid min-h-16 min-w-[260px] place-items-center text-center text-[10px] text-[#6B7280]">
+          <div className="grid h-full place-items-center text-center text-[10px] text-[#6B7280]">
             Esperando alertas de mercado...
           </div>
         ) : (
-          <div className="min-w-[260px] space-y-1">
+          <div className="space-y-1">
             <AnimatePresence initial={false}>
               {latestAlerts.map((alert) => (
                 <AlertRow key={alert.id} alert={alert} />
@@ -81,23 +73,48 @@ export function AlertsPanel() {
   );
 }
 
-function FilterButton({ current, value, label, onClick }: { current: FilterType, value: FilterType, label: string, onClick: () => void }) {
-  const isActive = current === value;
-  let colorClass = "text-gray-400 hover:text-white border-transparent";
-  if (isActive) {
-    if (value === "high") colorClass = "text-red-400 bg-red-400/10 border-red-400/30";
-    else if (value === "medium") colorClass = "text-amber-400 bg-amber-400/10 border-amber-400/30";
-    else if (value === "low") colorClass = "text-cyan-400 bg-cyan-400/10 border-cyan-400/30";
-    else colorClass = "text-white bg-white/10 border-white/30";
-  }
+function FilterDropdown({ filter, setFilter }: { filter: FilterType, setFilter: (f: FilterType) => void }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const options: { value: FilterType; label: string }[] = [
+    { value: "all", label: "ALL" },
+    { value: "high", label: "HIGH" },
+    { value: "medium", label: "MED" },
+    { value: "low", label: "LOW" },
+  ];
+
+  const handleSelect = (val: FilterType) => {
+    setFilter(val);
+    if (detailsRef.current) {
+      detailsRef.current.removeAttribute("open");
+    }
+  };
+
+  const currentLabel = options.find((o) => o.value === filter)?.label || "ALL";
 
   return (
-    <button 
-      onClick={onClick}
-      className={`text-[8px] font-mono px-1.5 py-0.5 rounded border ${colorClass} transition-colors`}
-    >
-      {label}
-    </button>
+    <details ref={detailsRef} className="relative group">
+      <summary className="list-none cursor-pointer flex items-center justify-between gap-1 h-5 min-w-[40px] px-1.5 font-mono text-[10px] uppercase tracking-[0.08em] transition-colors border border-white/10 bg-white/[0.03] text-amber-200 hover:bg-white/[0.08] rounded-sm">
+        {currentLabel}
+        <span className="text-[6px] opacity-70">▼</span>
+      </summary>
+      <div className="absolute top-full left-0 mt-1 min-w-[40px] max-h-28 overflow-y-auto bg-[#1E222D] border border-white/10 rounded shadow-xl z-50 p-0.5 flex flex-col gap-0.5 scrollbar-thin scrollbar-thumb-white/10">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            style={{ fontSize: "9px", lineHeight: "12px" }}
+            className={`text-center px-1 py-0.5 font-mono rounded ${
+              filter === opt.value
+                ? "bg-amber-500/20 text-amber-200"
+                : "text-[#D1D4DC] hover:bg-[#2A2E39]"
+            }`}
+            type="button"
+            onClick={() => handleSelect(opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -114,7 +131,7 @@ function AlertRow({ alert }: { alert: MarketAlert }) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.2 }}
-      className={`relative min-w-[260px] border ${tone.border} ${tone.bg} px-1.5 py-1 ${isUnread ? 'shadow-[0_0_8px_rgba(255,255,255,0.1)]' : ''}`}
+      className={`relative border ${tone.border} ${tone.bg} px-1.5 py-1 ${isUnread ? 'shadow-[0_0_8px_rgba(255,255,255,0.1)]' : ''}`}
     >
       {isUnread && (
         <div className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-white shadow-[0_0_5px_white] animate-pulse" />
@@ -125,24 +142,18 @@ function AlertRow({ alert }: { alert: MarketAlert }) {
         >
           {formatAlertType(alert.type)}
         </span>
-        <span className="shrink-0 font-mono text-[8px] text-[#6B7280]">
-          {formatTime(alert.timestamp)}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`font-mono text-[8px] uppercase tracking-[0.1em] ${tone.text}`}>
+            {alert.severity}
+          </span>
+          <span className="shrink-0 font-mono text-[8px] text-[#6B7280]">
+            {formatTime(alert.timestamp)}
+          </span>
+        </div>
       </div>
       <p className="mt-0.5 text-[10px] leading-3 text-[#E5E7EB]">
         {alert.message}
       </p>
-      <div className="mt-1 flex items-center justify-between">
-        <p className="font-mono text-[8px] uppercase tracking-[0.1em] text-[#9CA3AF]">
-          {alert.symbol} - {alert.severity}
-        </p>
-        <button 
-          onClick={() => setFocusedTimestamp(alert.timestamp)}
-          className={`font-mono text-[8px] border ${tone.border} px-1.5 py-0.5 rounded hover:bg-white/10 transition-colors ${tone.text}`}
-        >
-          Ver en gráfico
-        </button>
-      </div>
     </motion.article>
   );
 }

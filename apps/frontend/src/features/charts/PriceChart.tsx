@@ -28,7 +28,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useMarketStore } from "../../stores/marketStore";
-import { useWindowOrderFlow } from "../orderflow/useWindowOrderFlow";
+import { useChartOrderFlow } from "../orderflow/useWindowOrderFlow";
 import {
   createTerminalChart,
   observeTerminalChartSize,
@@ -86,15 +86,19 @@ export function PriceChart() {
   const pricePoints = useMarketStore(
     (state) => state.snapshot?.pricePoints ?? EMPTY_PRICE_POINTS,
   );
-  const windowOrderFlow = useWindowOrderFlow();
-const largeTrades = windowOrderFlow.largeTrades;
-  const cvdPoints = windowOrderFlow.cvdPoints;
-  const cvd = windowOrderFlow.cvd;
+
+  const snapshotTimestamp = useMarketStore((state) => state.snapshot?.timestamp ?? 0);
+  const chartTimeframe = useMarketStore((state) => state.chartTimeframe);
+  const candleIntervalSeconds = timeframeToSeconds(chartTimeframe);
+
+  const chartOrderFlow = useChartOrderFlow();
+  const chartLargeTrades = chartOrderFlow.largeTrades;
+  const chartCvdPoints = chartOrderFlow.cvdPoints;
+
   const absoluteCvd = useMarketStore((state) => state.snapshot?.cvd ?? 0);
   const absoluteCvdRef = useRef(absoluteCvd);
   absoluteCvdRef.current = absoluteCvd;
   const initialCvdRef = useRef(absoluteCvd);
-  const snapshotTimestamp = useMarketStore((state) => state.snapshot?.timestamp ?? 0);
   const whaleOrders = useMarketStore((state) => state.whaleOrders ?? EMPTY_WHALE_ORDERS);
   const liquidityMapZonesByRes = useMarketStore((state) => state.liquidityMapZones);
   const liquidityMapResolution = useMarketStore((state) => state.liquidityMapResolution);
@@ -103,10 +107,8 @@ const largeTrades = windowOrderFlow.largeTrades;
   }, [liquidityMapZonesByRes, liquidityMapResolution]);
   const lastPrice = useMarketStore((state) => state.snapshot?.lastPrice ?? 0);
   const depthRange = useMarketStore((state) => state.depthRange);
-  const chartTimeframe = useMarketStore((state) => state.chartTimeframe);
   const setChartTimeframe = useMarketStore((state) => state.setChartTimeframe);
   const focusedTimestamp = useMarketStore((state) => state.focusedTimestamp);
-  const candleIntervalSeconds = timeframeToSeconds(chartTimeframe);
   const usesExchangeHistory = isExchangeHistoryTimeframe(chartTimeframe);
   const hasExchangeHistoryForTimeframe =
     usesExchangeHistory &&
@@ -118,8 +120,7 @@ const largeTrades = windowOrderFlow.largeTrades;
     () => toChartLiquidityBands(whaleOrders, showCancelledOrders, lastPrice, depthRange),
     [depthRange, lastPrice, showCancelledOrders, whaleOrders],
   );
-  const tradeMarkers = useMemo(() => toChartTradeMarkers(largeTrades), [largeTrades]);
-  const cvdTone = cvd >= 0 ? "text-emerald-200" : "text-red-200";
+  const tradeMarkers = useMemo(() => toChartTradeMarkers(chartLargeTrades), [chartLargeTrades]);
 
   function resetChartView() {
     const chart = chartRef.current;
@@ -187,43 +188,55 @@ const largeTrades = windowOrderFlow.largeTrades;
       return;
     }
 
+    let isMounted = true;
     const controller = new AbortController();
     const interval = chartTimeframe as CandleInterval;
 
+    function fetchCandles() {
+      fetch(
+        `${BACKEND_URL}/api/market/candles?symbol=BTCUSDT&interval=${interval}&limit=500`,
+        { signal: controller.signal },
+      )
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`Candles request failed with ${response.status}`);
+          }
+
+          const payload: unknown = await response.json();
+
+          if (!isMarketCandlesResponse(payload)) {
+            throw new Error("Invalid candles response");
+          }
+
+          if (isMounted) {
+            setHistoricalCandles(payload.candles);
+            setHistoryStatus("exchange");
+            initialCvdRef.current = absoluteCvdRef.current;
+          }
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) {
+            return;
+          }
+
+          console.error("Unable to load Binance candles", error);
+          if (isMounted) {
+            setHistoricalCandles((prev) => (prev.length > 0 ? prev : []));
+            setHistoryStatus("error");
+          }
+        });
+    }
+
     setHistoricalCandles([]);
     setHistoryStatus("loading");
+    fetchCandles();
 
-    fetch(
-      `${BACKEND_URL}/api/market/candles?symbol=BTCUSDT&interval=${interval}&limit=500`,
-      { signal: controller.signal },
-    )
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Candles request failed with ${response.status}`);
-        }
-
-        const payload: unknown = await response.json();
-
-        if (!isMarketCandlesResponse(payload)) {
-          throw new Error("Invalid candles response");
-        }
-
-        setHistoricalCandles(payload.candles);
-        setHistoryStatus("exchange");
-        initialCvdRef.current = absoluteCvdRef.current;
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        console.error("Unable to load Binance candles", error);
-        setHistoricalCandles([]);
-        setHistoryStatus("error");
-      });
+    const pollingInterval = setInterval(fetchCandles, 30000);
 
     return () => {
+      isMounted = false;
       controller.abort();
+      clearInterval(pollingInterval);
     };
   }, [chartTimeframe, usesExchangeHistory]);
 
@@ -277,7 +290,15 @@ const largeTrades = windowOrderFlow.largeTrades;
 
     if (priceDataKeyRef.current !== priceDataKey || latestTimeRef.current === null) {
       series.setData(data);
-      chartRef.current?.timeScale().fitContent();
+      
+      // Sólo ajustamos el zoom si es la primera vez que cargamos este timeframe
+      if (
+        latestTimeRef.current === null ||
+        priceDataKeyRef.current?.split(":")[1] !== chartTimeframe
+      ) {
+        chartRef.current?.timeScale().fitContent();
+      }
+      
       priceDataKeyRef.current = priceDataKey;
     } else {
       series.update(latestPoint);
@@ -318,7 +339,7 @@ const largeTrades = windowOrderFlow.largeTrades;
         snapshotTimestamp
       );
     } else {
-      data = toCvdLineData(cvdPoints, MAX_CVD_POINTS, candleIntervalSeconds);
+      data = toCvdLineData(chartCvdPoints, MAX_CVD_POINTS, candleIntervalSeconds);
     }
 
     const latestPoint = data.at(-1);
@@ -333,7 +354,7 @@ const largeTrades = windowOrderFlow.largeTrades;
     latestCvdTimeRef.current = latestPoint.time;
   }, [
     candleIntervalSeconds,
-    cvdPoints,
+    chartCvdPoints,
     hasExchangeHistoryForTimeframe,
     historicalCandles,
     chartTimeframe,
@@ -970,18 +991,4 @@ function getHistoricalCandlesKey(candles: MarketCandle[]) {
   return `${candles.length}:${first?.openTime ?? 0}:${last?.openTime ?? 0}`;
 }
 
-function getHistoryLabel(status: "synthetic" | "loading" | "exchange" | "error") {
-  if (status === "exchange") {
-    return "Velas historicas reales desde Binance";
-  }
 
-  if (status === "loading") {
-    return "Cargando historial real de Binance";
-  }
-
-  if (status === "error") {
-    return "Historial no disponible, flujo en vivo activo";
-  }
-
-  return "Velas sinteticas desde price feed";
-}

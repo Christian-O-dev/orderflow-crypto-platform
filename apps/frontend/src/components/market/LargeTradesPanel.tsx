@@ -1,6 +1,6 @@
 import type { LargeTradeEvent } from "@orderflow/shared";
 import clsx from "clsx";
-import { useWindowOrderFlow } from "../../features/orderflow/useWindowOrderFlow";
+import { useChartOrderFlow } from "../../features/orderflow/useWindowOrderFlow";
 import { useMarketStore } from "../../stores/marketStore";
 
 const priceFormat = new Intl.NumberFormat("en-US", {
@@ -19,9 +19,8 @@ const usdFormat = new Intl.NumberFormat("en-US", {
 });
 
 export function LargeTradesPanel() {
-  const windowOrderFlow = useWindowOrderFlow();
-  const largeTrades = windowOrderFlow.largeTrades;
-  const analysisWindow = useMarketStore((state) => state.analysisWindow);
+  const chartOrderFlow = useChartOrderFlow();
+  const largeTrades = chartOrderFlow.largeTrades;
   const historicalAggTradesStatus = useMarketStore(
     (state) => state.historicalAggTradesStatus,
   );
@@ -36,11 +35,6 @@ export function LargeTradesPanel() {
           <div className="flex flex-col items-end gap-1">
             <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-[#9CA3AF]">
               {largeTrades.length}/100 window
-            </span>
-            <span className="rounded-full border border-amber-300/15 bg-amber-300/[0.06] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-amber-100">
-              {historicalAggTradesStatus === "loading"
-                ? "hist loading"
-                : `${windowOrderFlow.historicalTradesCount} hist + ${windowOrderFlow.liveTradesCount} live`}
             </span>
           </div>
         </div>

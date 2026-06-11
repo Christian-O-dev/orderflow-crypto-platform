@@ -53,11 +53,18 @@ export function Dashboard() {
           Cerrar Sesión
         </button>
       </div>
-      <OrderFlowWindowSummaryPanel />
-
       <ResizableDashboard
         leftTop={<PriceChart />}
-        leftBottom={<AlertsPanel />}
+        leftBottom={
+          <div className="flex h-full w-full flex-col lg:flex-row gap-2 overflow-hidden bg-[#111827]/90 p-1">
+            <div className="flex-1 min-w-0 h-full overflow-hidden border border-white/10">
+              <OrderFlowWindowSummaryPanel />
+            </div>
+            <div className="flex-1 min-w-0 h-full overflow-hidden">
+              <AlertsPanel />
+            </div>
+          </div>
+        }
         rightPanel={<UnifiedDataPanel />}
       />
     </TerminalShell>

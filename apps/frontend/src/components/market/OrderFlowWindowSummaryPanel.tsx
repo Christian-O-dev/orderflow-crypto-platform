@@ -21,11 +21,11 @@ export function OrderFlowWindowSummaryPanel() {
   const summary = useMarketStore((state) => state.windowOrderFlowSummary);
 
   return (
-    <div className="flex flex-col gap-2 bg-[#0B0E14] border-b border-white/10 px-4 py-3">
+    <div className="flex flex-col h-full overflow-hidden gap-2 bg-[#0B0E14] px-4 py-3">
       <div className="flex items-center gap-2">
         <div
           className={clsx(
-            "h-2 w-2 rounded-full",
+            "h-2 w-2 rounded-full shrink-0",
             summary.marketBias === "bullish" && "bg-emerald-500",
             summary.marketBias === "bearish" && "bg-red-500",
             summary.marketBias === "mixed" && "bg-amber-500",
@@ -34,7 +34,7 @@ export function OrderFlowWindowSummaryPanel() {
         />
         <span
           className={clsx(
-            "text-sm font-medium",
+            "text-xs font-medium truncate",
             summary.marketBias === "bullish" && "text-emerald-400",
             summary.marketBias === "bearish" && "text-red-400",
             summary.marketBias === "mixed" && "text-amber-400",
@@ -43,15 +43,15 @@ export function OrderFlowWindowSummaryPanel() {
         >
           {summary.message}
         </span>
+        
+        <div className="ml-auto flex items-center gap-1.5 bg-white/[0.02] border border-white/[0.05] rounded px-1.5 py-0.5 shrink-0">
+          <span className="text-[9px] text-slate-500 uppercase tracking-wider hidden sm:inline">Window:</span>
+          <AnalysisWindowSelector />
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-3 mt-2">
-        <div className="flex flex-col bg-white/[0.02] border border-white/[0.05] rounded p-2">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider">Window</span>
-          <div className="mt-1 flex items-center h-full">
-            <AnalysisWindowSelector />
-          </div>
-        </div>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-3 mt-2 overflow-y-auto min-h-0">
+
         <SummaryCard 
           title="Delta" 
           value={volumeFormat.format(summary.delta)} 

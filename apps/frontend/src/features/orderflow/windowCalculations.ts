@@ -32,6 +32,17 @@ export type WindowOrderFlowSummary = OrderFlowWindowSummary & {
   totalTradesCount: number;
 };
 
+export function getChartAnalysisWindow(tf: string): AnalysisWindow {
+  switch (tf) {
+    case "1m": return "1h";
+    case "3m": return "2h";
+    case "5m": return "4h";
+    case "15m": return "12h";
+    case "30m": return "1d";
+    default: return "1d";
+  }
+}
+
 export const EMPTY_WINDOW_ORDER_FLOW_SUMMARY: WindowOrderFlowSummary = {
   symbol: "BTCUSDT",
   exchange: "binance",
@@ -142,7 +153,7 @@ export function calculateWindowOrderFlow({
   liveTrades,
   liveLargeTrades,
   whaleOrders,
-  lastPrice,
+
   analysisWindow,
   now,
 }: {
@@ -150,7 +161,6 @@ export function calculateWindowOrderFlow({
   liveTrades: NormalizedTrade[];
   liveLargeTrades: LargeTradeEvent[];
   whaleOrders: WhaleLiquidityLevel[];
-  lastPrice: number;
   analysisWindow: AnalysisWindow;
   now: number;
 }): WindowOrderFlowSummary {
@@ -283,6 +293,12 @@ export function analysisWindowToMs(window: AnalysisWindow) {
   return amount * 60 * 60 * 1000;
 }
 
+export function getMaxWindow(...windows: AnalysisWindow[]): AnalysisWindow {
+  return windows.reduce((max, current) => 
+    analysisWindowToMs(current) > analysisWindowToMs(max) ? current : max
+  );
+}
+
 function calculateDelta(
   trades: Array<Pick<HistoricalAggTrade, "quantity" | "side">>,
 ): HistoricalDelta {
@@ -307,7 +323,7 @@ function calculateDelta(
   };
 }
 
-function calculateCvdPoints(
+export function calculateCvdPoints(
   trades: Array<Pick<HistoricalAggTrade, "quantity" | "side" | "timestamp">>,
   baselineTimestamp?: number,
 ): CvdPoint[] {
@@ -383,7 +399,7 @@ function toLargeTradeEvent(
   };
 }
 
-function mergeLargeTrades(
+export function mergeLargeTrades(
   historicalLargeTrades: LargeTradeEvent[],
   liveLargeTrades: LargeTradeEvent[],
 ) {
@@ -419,7 +435,7 @@ function isCoveredByHistoricalAggTrade(
   );
 }
 
-function isLiveLargeTradeCoveredByHistoricalAggTrade(
+export function isLiveLargeTradeCoveredByHistoricalAggTrade(
   trade: LargeTradeEvent,
   historicalTradeIdRanges: TradeIdRange[],
 ) {

@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMarketStore } from "../../stores/marketStore";
 import { getCombinedWindowTrades } from "../orderflow/windowCalculations";
 import { calculateVolumeProfile } from "../orderflow/volumeProfileCalculations";
+import { getChartAnalysisWindow } from "../orderflow/windowCalculations";
 import type { ISeriesApi } from "lightweight-charts";
-import type { VolumeProfileLevel } from "@orderflow/shared";
 import clsx from "clsx";
 
 export function VolumeProfileOverlay({
@@ -15,25 +15,26 @@ export function VolumeProfileOverlay({
 }) {
   const historicalTrades = useMarketStore((state) => state.historicalAggTrades);
   const liveTrades = useMarketStore((state) => state.liveSessionTrades);
-  const analysisWindow = useMarketStore((state) => state.analysisWindow);
+  const chartTimeframe = useMarketStore((state) => state.chartTimeframe);
   const now = useMarketStore((state) => state.snapshot?.timestamp ?? Date.now());
 
   const profile = useMemo(() => {
+    const windowToUse = getChartAnalysisWindow(chartTimeframe);
     const { combinedTrades } = getCombinedWindowTrades({
       historicalTrades,
       liveTrades,
-      analysisWindow,
+      analysisWindow: windowToUse,
       now,
     });
     return calculateVolumeProfile(combinedTrades, tickSize);
-  }, [historicalTrades, liveTrades, analysisWindow, now, tickSize]);
+  }, [historicalTrades, liveTrades, chartTimeframe, now, tickSize]);
 
   const maxTotalVolume = useMemo(() => {
     return profile.reduce((max, level) => Math.max(max, level.totalVolume), 0);
   }, [profile]);
 
   const [, forceRender] = useState({});
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number>(0);
 
   useEffect(() => {
     // Continuously sync DOM overlay with the Canvas price scale

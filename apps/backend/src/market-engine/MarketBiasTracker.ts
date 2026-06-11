@@ -1,7 +1,7 @@
 import { MARKET_CONFIG } from "../config/marketConfig.js";
 import { BinanceKlineHistoryService } from "../exchanges/binance/BinanceKlineHistoryService.js";
 import { telegramService } from "../services/TelegramService.js";
-import type { WhaleLiquidityLevel } from "../whale-engine/WhaleOrderEngine.js";
+import type { WhaleLiquidityLevel } from "../types/market.js";
 
 type Timeframe = "1h" | "4h" | "1d";
 

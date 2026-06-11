@@ -38,13 +38,12 @@ export class BinanceAggTradesHistoryService {
   }: GetAggTradesOptions): Promise<HistoricalAggTrade[]> {
     const range = resolveTimeRange({ window, startTime, endTime });
     const trades: HistoricalAggTrade[] = [];
-    let nextStartTime = range.startTime;
+    let nextEndTime = range.endTime;
 
-    while (nextStartTime <= range.endTime && trades.length < MAX_TOTAL_TRADES) {
+    while (nextEndTime >= range.startTime && trades.length < MAX_TOTAL_TRADES) {
       const page = await this.fetchPage({
         symbol,
-        startTime: nextStartTime,
-        endTime: range.endTime,
+        endTime: nextEndTime,
       });
 
       if (page.length === 0) {
@@ -52,15 +51,16 @@ export class BinanceAggTradesHistoryService {
       }
 
       const normalizedPage = page.map((trade) => normalizeAggTrade(trade, symbol));
-      trades.push(...normalizedPage);
+      // Prepend because we are paginating backwards
+      trades.unshift(...normalizedPage);
 
-      const lastTimestamp = page.at(-1)?.T;
+      const firstTimestamp = page[0]?.T;
 
-      if (!lastTimestamp || lastTimestamp < nextStartTime) {
+      if (!firstTimestamp || firstTimestamp <= range.startTime) {
         break;
       }
 
-      nextStartTime = lastTimestamp + 1;
+      nextEndTime = firstTimestamp - 1;
 
       if (page.length < REQUEST_LIMIT) {
         break;
@@ -72,21 +72,18 @@ export class BinanceAggTradesHistoryService {
         (trade) =>
           trade.timestamp >= range.startTime && trade.timestamp <= range.endTime,
       )
-      .slice(0, MAX_TOTAL_TRADES);
+      .slice(-MAX_TOTAL_TRADES);
   }
 
   private async fetchPage({
     symbol,
-    startTime,
     endTime,
   }: {
     symbol: MarketSymbol;
-    startTime: number;
     endTime: number;
   }) {
     const url = new URL(BINANCE_AGG_TRADES_URL);
     url.searchParams.set("symbol", symbol);
-    url.searchParams.set("startTime", String(startTime));
     url.searchParams.set("endTime", String(endTime));
     url.searchParams.set("limit", String(REQUEST_LIMIT));
 

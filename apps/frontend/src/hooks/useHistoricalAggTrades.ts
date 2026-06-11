@@ -1,11 +1,19 @@
 import type { HistoricalAggTrade } from "@orderflow/shared";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useMarketStore } from "../stores/marketStore";
+import { getChartAnalysisWindow, getMaxWindow } from "../features/orderflow/windowCalculations";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:4000";
 
 export function useHistoricalAggTrades() {
   const analysisWindow = useMarketStore((state) => state.analysisWindow);
+  const chartTimeframe = useMarketStore((state) => state.chartTimeframe);
+  
+  const fetchWindow = useMemo(() => {
+    const chartWindow = getChartAnalysisWindow(chartTimeframe);
+    return getMaxWindow(analysisWindow, chartWindow);
+  }, [analysisWindow, chartTimeframe]);
+
   const setHistoricalAggTradesLoading = useMarketStore(
     (state) => state.setHistoricalAggTradesLoading,
   );
@@ -20,7 +28,7 @@ export function useHistoricalAggTrades() {
     const controller = new AbortController();
     const url = new URL(`${BACKEND_URL}/api/market/agg-trades`);
     url.searchParams.set("symbol", "BTCUSDT");
-    url.searchParams.set("window", analysisWindow);
+    url.searchParams.set("window", fetchWindow);
 
     setHistoricalAggTradesLoading();
 
@@ -54,7 +62,7 @@ export function useHistoricalAggTrades() {
       controller.abort();
     };
   }, [
-    analysisWindow,
+    fetchWindow,
     setHistoricalAggTrades,
     setHistoricalAggTradesError,
     setHistoricalAggTradesLoading,
