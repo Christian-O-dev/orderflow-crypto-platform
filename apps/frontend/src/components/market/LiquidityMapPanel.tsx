@@ -44,7 +44,7 @@ export function LiquidityMapPanel() {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0B0E14]">
       <div className="flex items-center justify-between gap-2 border-b border-cyan-300/15 bg-cyan-300/[0.04] px-2.5 py-1.5 font-mono text-[9.5px] text-cyan-100">
         <div className="flex items-center gap-2">
-          <span>Orderbook Heatmap (Zonas Agrupadas)</span>
+          {/* Title removed, managed by UnifiedDataPanel */}
           <div className="flex gap-1 ml-2">
             {(["100", "500", "2000"] as const).map((res) => (
               <button

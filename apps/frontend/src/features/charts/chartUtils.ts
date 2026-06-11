@@ -57,6 +57,12 @@ export function createTerminalChart({
       textColor: "#9CA3AF",
       fontFamily: "JetBrains Mono, Cascadia Code, Consolas, monospace",
     },
+    localization: {
+      timeFormatter: (time: Time) => {
+        const date = new Date((time as number) * 1000);
+        return date.toLocaleString();
+      },
+    },
     grid: {
       vertLines: { color: "rgba(255,255,255,0.04)" },
       horzLines: { color: "rgba(255,255,255,0.06)" },
@@ -68,6 +74,14 @@ export function createTerminalChart({
       borderColor: "rgba(255,255,255,0.1)",
       timeVisible: true,
       secondsVisible: true,
+      tickMarkFormatter: (time: Time, tickMarkType: number, locale: string) => {
+        const date = new Date((time as number) * 1000);
+        // Types of tick marks: 0: Year, 1: Month, 2: DayOfMonth, 3: Time, 4: TimeWithSeconds
+        if (tickMarkType === 0) return date.getFullYear().toString();
+        if (tickMarkType === 1) return date.toLocaleDateString(locale, { month: "short" });
+        if (tickMarkType === 2) return date.getDate().toString();
+        return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+      },
     },
     handleScale: {
       axisDoubleClickReset: {

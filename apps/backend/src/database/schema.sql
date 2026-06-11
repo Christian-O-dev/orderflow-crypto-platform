@@ -28,3 +28,10 @@ CREATE TABLE IF NOT EXISTS market_alerts (
 CREATE INDEX IF NOT EXISTS market_alerts_symbol_event_idx
   ON market_alerts (symbol, event_at DESC);
 
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'User',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

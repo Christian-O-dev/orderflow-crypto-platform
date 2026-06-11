@@ -12,7 +12,11 @@ const SUPPORTED_INTERVALS = new Set<CandleInterval>([
   "15m",
   "30m",
   "1h",
+  "2h",
   "4h",
+  "6h",
+  "8h",
+  "12h",
   "1d",
 ]);
 const DEFAULT_LIMIT = 500;

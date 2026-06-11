@@ -26,7 +26,7 @@ import {
   type Time,
 } from "lightweight-charts";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { TimeframeSelector } from "../../components/market/TimeframeSelector";
+
 import { useMarketStore } from "../../stores/marketStore";
 import { useWindowOrderFlow } from "../orderflow/useWindowOrderFlow";
 import {
@@ -48,7 +48,11 @@ const EXCHANGE_HISTORY_INTERVALS = new Set<ChartTimeframe>([
   "15m",
   "30m",
   "1h",
+  "2h",
   "4h",
+  "6h",
+  "8h",
+  "12h",
   "1d",
 ]);
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:4000";
@@ -73,6 +77,7 @@ export function PriceChart() {
   const [showLargeTrades, setShowLargeTrades] = useState(true);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showVolumeProfile, setShowVolumeProfile] = useState(true);
+  const [showCVD, setShowCVD] = useState(false);
   const [profileTickSize, setProfileTickSize] = useState<number>(50);
   const [historicalCandles, setHistoricalCandles] = useState<MarketCandle[]>([]);
   const [historyStatus, setHistoryStatus] = useState<
@@ -99,6 +104,8 @@ const largeTrades = windowOrderFlow.largeTrades;
   const lastPrice = useMarketStore((state) => state.snapshot?.lastPrice ?? 0);
   const depthRange = useMarketStore((state) => state.depthRange);
   const chartTimeframe = useMarketStore((state) => state.chartTimeframe);
+  const setChartTimeframe = useMarketStore((state) => state.setChartTimeframe);
+  const focusedTimestamp = useMarketStore((state) => state.focusedTimestamp);
   const candleIntervalSeconds = timeframeToSeconds(chartTimeframe);
   const usesExchangeHistory = isExchangeHistoryTimeframe(chartTimeframe);
   const hasExchangeHistoryForTimeframe =
@@ -150,30 +157,10 @@ const largeTrades = windowOrderFlow.largeTrades;
       priceLineColor: "rgba(34,211,238,0.65)",
     });
     const tradeMarkersPlugin = createSeriesMarkers(series, []);
-    const cvdSeries = chart.addSeries(
-      LineSeries,
-      {
-        color: "#22D3EE",
-        lineWidth: 2,
-        priceLineColor: "rgba(34,211,238,0.35)",
-        title: "CVD",
-        crosshairMarkerVisible: false,
-      },
-      1,
-    );
-
     series.getPane().setStretchFactor(3);
-    cvdSeries.getPane().setStretchFactor(1);
-    cvdSeries.priceScale().applyOptions({
-      scaleMargins: {
-        top: 0.14,
-        bottom: 0.14,
-      },
-    });
 
     chartRef.current = chart;
     seriesRef.current = series;
-    cvdSeriesRef.current = cvdSeries;
     tradeMarkersRef.current = tradeMarkersPlugin;
     const stopResizing = observeTerminalChartSize(container, chart);
 
@@ -351,7 +338,8 @@ const largeTrades = windowOrderFlow.largeTrades;
     historicalCandles,
     chartTimeframe,
     absoluteCvd,
-    snapshotTimestamp
+    snapshotTimestamp,
+    showCVD
   ]);
 
   useEffect(() => {
@@ -394,72 +382,130 @@ const largeTrades = windowOrderFlow.largeTrades;
     );
   }, [candleIntervalSeconds, showLargeTrades, tradeMarkers]);
 
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !focusedTimestamp) return;
+
+    // Centramos el gráfico +- 30 velas del momento de la alerta
+    const targetTime = Math.floor(focusedTimestamp / 1000);
+    const halfWindowSeconds = candleIntervalSeconds * 30;
+    
+    chart.timeScale().setVisibleRange({
+      from: (targetTime - halfWindowSeconds) as Time,
+      to: (targetTime + halfWindowSeconds) as Time,
+    });
+  }, [focusedTimestamp, candleIntervalSeconds]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    if (showCVD) {
+      if (!cvdSeriesRef.current) {
+        const cvdSeries = chart.addSeries(
+          LineSeries,
+          {
+            color: "#22D3EE",
+            lineWidth: 2,
+            priceLineColor: "rgba(34,211,238,0.35)",
+            title: "CVD",
+            crosshairMarkerVisible: false,
+          },
+          1,
+        );
+        cvdSeries.getPane().setStretchFactor(1);
+        cvdSeries.priceScale().applyOptions({
+          scaleMargins: {
+            top: 0.14,
+            bottom: 0.14,
+          },
+        });
+        cvdSeriesRef.current = cvdSeries;
+      }
+    } else {
+      if (cvdSeriesRef.current) {
+        chart.removeSeries(cvdSeriesRef.current);
+        cvdSeriesRef.current = null;
+      }
+    }
+  }, [showCVD]);
+
   return (
     <section className="flex min-h-[280px] flex-col overflow-hidden border border-white/10 bg-[#111827]/90 lg:h-full lg:min-h-0">
-      <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
-        <div>
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#E5E7EB]">
-            BTC Price
-          </h2>
-          <p className="mt-0.5 text-[10px] text-[#6B7280]">
-            {getHistoryLabel(historyStatus)}
-          </p>
+      <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2 bg-[#131722]">
+        {/* Asset Selector */}
+        <div className="flex items-center">
+          <select className="appearance-none bg-[#2A2E39] hover:bg-[#363A45] text-[#D1D4DC] rounded px-3 py-1 text-[13px] font-medium outline-none cursor-pointer">
+            <option value="BTC">BTC</option>
+          </select>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <TimeframeSelector />
-          <OverlayToggle
-            checked={showWhaleOrders}
-            label="Show Whale Orders"
-            onChange={setShowWhaleOrders}
-          />
-          <OverlayToggle
-            checked={showCancelledOrders}
-            label="Show Cancelled Orders"
-            onChange={setShowCancelledOrders}
-          />
-          <OverlayToggle
-            checked={showLargeTrades}
-            label="Show Large Trades"
-            onChange={setShowLargeTrades}
-          />
-          <OverlayToggle
-            checked={showHeatmap}
-            label="Show Heatmap"
-            onChange={setShowHeatmap}
-          />
-          <OverlayToggle
-            checked={showVolumeProfile}
-            label="Show Vol Profile"
-            onChange={setShowVolumeProfile}
-          />
-          {showVolumeProfile && (
-            <select
-              value={profileTickSize}
-              onChange={(e) => setProfileTickSize(Number(e.target.value))}
-              className="bg-white/[0.03] border border-white/10 text-cyan-200 px-1 py-0.5 text-[9px] uppercase tracking-wider outline-none"
-            >
-              <option value={10}>10 Tick</option>
-              <option value={25}>25 Tick</option>
-              <option value={50}>50 Tick</option>
-              <option value={100}>100 Tick</option>
-            </select>
-          )}
-          <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-cyan-200">
-            {chartTimeframe} candles
-          </span>
-          <span className={`rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] ${cvdTone}`}>
-            CVD {cvd.toFixed(2)}
-          </span>
+
+        <div className="w-[1px] h-4 bg-white/10 mx-1"></div>
+
+        {/* Timeframe Selector */}
+        <div className="flex items-center">
+          <select
+            value={chartTimeframe}
+            onChange={(e) => setChartTimeframe(e.target.value as ChartTimeframe)}
+            className="appearance-none bg-transparent hover:bg-[#2A2E39] text-[#D1D4DC] rounded px-3 py-1 text-[13px] font-medium outline-none cursor-pointer"
+          >
+            <option value="1m">1 minuto</option>
+            <option value="5m">5 minuto</option>
+            <option value="15m">15 minuto</option>
+            <option value="30m">30 minuto</option>
+            <option value="1h">1 hora</option>
+            <option value="2h">2 hora</option>
+            <option value="4h">4 hora</option>
+            <option value="6h">6 hora</option>
+            <option value="8h">8 hora</option>
+            <option value="12h">12 hora</option>
+            <option value="1d">1 día</option>
+          </select>
         </div>
+
+        <div className="w-[1px] h-4 bg-white/10 mx-1"></div>
+
+        {/* Indicators Dropdown */}
+        <details className="relative group">
+          <summary className="list-none cursor-pointer text-[#D1D4DC] hover:bg-[#2A2E39] rounded px-3 py-1 text-[13px] font-medium flex items-center gap-1">
+            Indicadores <span className="text-[10px] text-[#787B86]">▼</span>
+          </summary>
+          <div className="absolute top-full left-0 mt-1 w-56 bg-[#1E222D] border border-white/10 rounded shadow-xl z-50 p-3 flex flex-col gap-2">
+            <OverlayToggle checked={showWhaleOrders} label="Whale Orders" onChange={setShowWhaleOrders} />
+            <OverlayToggle checked={showCancelledOrders} label="Cancelled Orders" onChange={setShowCancelledOrders} />
+            <OverlayToggle checked={showLargeTrades} label="Large Trades" onChange={setShowLargeTrades} />
+            <OverlayToggle checked={showHeatmap} label="Heatmap" onChange={setShowHeatmap} />
+            
+            <div className="flex flex-col gap-1 border-t border-white/5 pt-2 mt-1">
+              <OverlayToggle checked={showVolumeProfile} label="Vol Profile" onChange={setShowVolumeProfile} />
+              {showVolumeProfile && (
+                <div className="flex items-center gap-2 pl-6">
+                  <span className="text-[10px] text-[#787B86]">Ticks:</span>
+                  <select
+                    value={profileTickSize}
+                    onChange={(e) => setProfileTickSize(Number(e.target.value))}
+                    className="bg-black/20 border border-white/10 text-[#D1D4DC] px-1 py-0.5 text-[10px] outline-none rounded"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1 border-t border-white/5 pt-2 mt-1">
+              <OverlayToggle checked={showCVD} label="CVD Indicator" onChange={setShowCVD} />
+            </div>
+          </div>
+        </details>
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden p-1.5">
         {showVolumeProfile && seriesRef.current && (
           <VolumeProfileOverlay series={seriesRef.current} tickSize={profileTickSize} />
         )}
-        <div className="pointer-events-none absolute bottom-[28%] left-3 z-10 border border-white/10 bg-[#0B0E14]/80 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-cyan-200">
-          CVD exchange history + live session
-        </div>
         <button
           aria-label="Reestablecer grafico de precio"
           className="absolute bottom-3 right-3 z-10 grid h-7 w-7 place-items-center border border-white/10 bg-[#0B0E14]/85 text-[#D1D5DB] shadow-2xl shadow-black/30 transition hover:border-cyan-300/30 hover:bg-[#111827] hover:text-cyan-200"

@@ -31,12 +31,7 @@ export function LargeTradesPanel() {
       <div className="border-b border-white/10 bg-[#0B0E14]/70 px-2.5 py-2">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#E5E7EB]">
-              Large Trades
-            </h2>
-            <p className="mt-0.5 text-[10px] text-[#6B7280]">
-              Ventana {analysisWindow}: exchange history + live session
-            </p>
+            {/* Title removed, managed by UnifiedDataPanel */}
           </div>
           <div className="flex flex-col items-end gap-1">
             <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-[#9CA3AF]">

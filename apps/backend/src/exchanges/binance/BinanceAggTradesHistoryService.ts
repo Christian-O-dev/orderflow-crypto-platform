@@ -8,12 +8,7 @@ const BINANCE_AGG_TRADES_URL = "https://api.binance.com/api/v3/aggTrades";
 const REQUEST_LIMIT = 1000;
 const MAX_TOTAL_TRADES = 5000;
 const SUPPORTED_WINDOWS = new Set<AnalysisWindow>([
-  "30s",
-  "1m",
-  "5m",
-  "15m",
-  "1h",
-  "4h",
+  "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"
 ]);
 
 type GetAggTradesOptions = {
@@ -143,15 +138,14 @@ function analysisWindowToMs(window: AnalysisWindow) {
   const amount = Number(window.slice(0, -1));
   const unit = window.at(-1);
 
-  if (unit === "s") {
-    return amount * 1000;
-  }
+  if (unit === "s") return amount * 1000;
+  if (unit === "m") return amount * 60 * 1000;
+  if (unit === "h") return amount * 60 * 60 * 1000;
+  if (unit === "d") return amount * 24 * 60 * 60 * 1000;
+  if (unit === "w") return amount * 7 * 24 * 60 * 60 * 1000;
+  if (unit === "M") return amount * 30 * 24 * 60 * 60 * 1000; // approximation
 
-  if (unit === "m") {
-    return amount * 60 * 1000;
-  }
-
-  return amount * 60 * 60 * 1000;
+  return amount * 60 * 60 * 1000; // fallback to hours
 }
 
 function normalizeAggTrade(

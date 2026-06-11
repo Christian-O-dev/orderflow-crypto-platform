@@ -7,26 +7,24 @@ import {
   useState,
 } from "react";
 
-const STORAGE_KEY = "orderflow.dashboard.layout.v1";
-const DEFAULT_COLUMNS = [22, 54, 24];
+const STORAGE_KEY = "orderflow.dashboard.layout.v2";
+const DEFAULT_COLUMNS = [70, 30];
 const DEFAULT_ROWS = [82, 18];
-const MIN_COLUMN_WIDTHS = [220, 420, 280];
+const MIN_COLUMN_WIDTHS = [600, 300];
 const MIN_ROW_HEIGHTS = [280, 100];
 const CENTER_HANDLE_TOTAL = 8;
 const HANDLE_STEP = 3;
 
 type ResizableDashboardProps = {
-  dom: ReactNode;
-  price: ReactNode;
-  alerts: ReactNode;
-  largeTrades: ReactNode;
-  tape: ReactNode;
+  leftTop: ReactNode;
+  leftBottom: ReactNode;
+  rightPanel: ReactNode;
 };
 
 type DragState =
   | {
       axis: "column";
-      dividerIndex: 0 | 1;
+      dividerIndex: 0;
       startPosition: number;
       size: number;
       values: number[];
@@ -45,14 +43,12 @@ type PersistedLayout = {
 };
 
 export function ResizableDashboard({
-  dom,
-  price,
-  alerts,
-  largeTrades,
-  tape,
+  leftTop,
+  leftBottom,
+  rightPanel,
 }: ResizableDashboardProps) {
   const dashboardRef = useRef<HTMLDivElement | null>(null);
-  const centerRef = useRef<HTMLDivElement | null>(null);
+  const leftRef = useRef<HTMLDivElement | null>(null);
   const [columns, setColumns] = useState(() => loadValues("columns", DEFAULT_COLUMNS));
   const [rows, setRows] = useState(() => loadValues("rows", DEFAULT_ROWS));
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -96,7 +92,7 @@ export function ResizableDashboard({
     };
   }, [drag]);
 
-  function beginColumnResize(dividerIndex: 0 | 1, event: PointerEvent<HTMLDivElement>) {
+  function beginColumnResize(dividerIndex: 0, event: PointerEvent<HTMLDivElement>) {
     const bounds = dashboardRef.current?.getBoundingClientRect();
 
     if (!bounds) {
@@ -114,7 +110,7 @@ export function ResizableDashboard({
   }
 
   function beginRowResize(dividerIndex: 0 | 1, event: PointerEvent<HTMLDivElement>) {
-    const bounds = centerRef.current?.getBoundingClientRect();
+    const bounds = leftRef.current?.getBoundingClientRect();
 
     if (!bounds) {
       return;
@@ -132,7 +128,7 @@ export function ResizableDashboard({
     });
   }
 
-  function adjustColumns(dividerIndex: 0 | 1, direction: number) {
+  function adjustColumns(dividerIndex: 0, direction: number) {
     const width = dashboardRef.current?.getBoundingClientRect().width ?? 1200;
     setColumns((current) =>
       resizePair(current, dividerIndex, direction * HANDLE_STEP, MIN_COLUMN_WIDTHS, width),
@@ -141,7 +137,7 @@ export function ResizableDashboard({
 
   function adjustRows(dividerIndex: 0 | 1, direction: number) {
     const height =
-      Math.max(1, (centerRef.current?.getBoundingClientRect().height ?? 720) - CENTER_HANDLE_TOTAL);
+      Math.max(1, (leftRef.current?.getBoundingClientRect().height ?? 720) - CENTER_HANDLE_TOTAL);
     setRows((current) =>
       resizePair(current, dividerIndex, direction * HANDLE_STEP, MIN_ROW_HEIGHTS, height),
     );
@@ -154,46 +150,34 @@ export function ResizableDashboard({
         drag ? "dashboard-resizing" : ""
       }`}
       style={{
-        gridTemplateColumns: `minmax(${MIN_COLUMN_WIDTHS[0]}px, ${columns[0]}fr) 8px minmax(${MIN_COLUMN_WIDTHS[1]}px, ${columns[1]}fr) 8px minmax(${MIN_COLUMN_WIDTHS[2]}px, ${columns[2]}fr)`,
+        gridTemplateColumns: `minmax(${MIN_COLUMN_WIDTHS[0]}px, ${columns[0]}fr) 8px minmax(${MIN_COLUMN_WIDTHS[1]}px, ${columns[1]}fr)`,
       }}
     >
-      <div className="min-h-0 overflow-hidden">{dom}</div>
-
-      <ResizeHandle
-        label="Ajustar DOM y graficos"
-        orientation="vertical"
-        onKeyStep={(direction) => adjustColumns(0, direction)}
-        onPointerDown={(event) => beginColumnResize(0, event)}
-      />
-
       <div
-        ref={centerRef}
+        ref={leftRef}
         className="flex min-h-0 flex-col gap-1.5 lg:grid lg:gap-0"
         style={{
           gridTemplateRows: `${toGridTrack(rows[0])} 8px ${toGridTrack(rows[1])}`,
         }}
       >
-        <div className="min-h-0 overflow-hidden">{price}</div>
+        <div className="min-h-0 overflow-hidden">{leftTop}</div>
         <ResizeHandle
           label="Ajustar grafico y alertas"
           orientation="horizontal"
           onKeyStep={(direction) => adjustRows(0, direction)}
           onPointerDown={(event) => beginRowResize(0, event)}
         />
-        <div className="min-h-0 overflow-hidden">{alerts}</div>
+        <div className="min-h-0 overflow-hidden">{leftBottom}</div>
       </div>
 
       <ResizeHandle
-        label="Ajustar graficos y tape"
+        label="Ajustar paneles derecho e izquierdo"
         orientation="vertical"
-        onKeyStep={(direction) => adjustColumns(1, direction)}
-        onPointerDown={(event) => beginColumnResize(1, event)}
+        onKeyStep={(direction) => adjustColumns(0, direction)}
+        onPointerDown={(event) => beginColumnResize(0, event)}
       />
 
-      <div className="flex min-h-0 flex-col gap-1.5 overflow-hidden lg:gap-1.5">
-        <div className="min-h-0 lg:h-[34%]">{largeTrades}</div>
-        <div className="min-h-0 flex-1">{tape}</div>
-      </div>
+      <div className="min-h-0 overflow-hidden">{rightPanel}</div>
     </div>
   );
 }

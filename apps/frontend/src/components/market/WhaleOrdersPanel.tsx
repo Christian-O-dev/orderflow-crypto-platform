@@ -160,7 +160,8 @@ function getDeepLiquidityLevels({
     .map((level) => toDeepLiquidityLevel(level, lastPrice, now))
     .filter((level) => level.distancePercent <= maxDistancePercent)
     .sort((left, right) => right.notionalUsd - left.notionalUsd)
-    .slice(0, ACTIVE_LIMIT_ORDERS_LIMIT);
+    .slice(0, ACTIVE_LIMIT_ORDERS_LIMIT)
+    .sort((left, right) => right.price - left.price);
 }
 
 function toDeepLiquidityLevel(

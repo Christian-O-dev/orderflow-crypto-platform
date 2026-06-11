@@ -10,6 +10,8 @@ import { SignalEngine } from "../signal-engine/SignalEngine.js";
 import { WhaleOrderEngine } from "../whale-engine/WhaleOrderEngine.js";
 import { LiquidityMapEngine } from "../liquidity-map/LiquidityMapEngine.js";
 import type { Database } from "../database/index.js";
+import { telegramService } from "../services/TelegramService.js";
+import { MarketBiasTracker } from "../market-engine/MarketBiasTracker.js";
 import { MARKET_CONFIG } from "../config/marketConfig.js";
 
 const VITE_DEV_ORIGINS = [/^http:\/\/localhost:517\d+$/, /^http:\/\/127\.0\.0\.1:517\d+$/];
@@ -64,6 +66,9 @@ export function createRealtimeServer(
     "2000": liquidityMapEngine2000.getZones(),
   };
 
+  const marketBiasTracker = new MarketBiasTracker(() => latestWhaleOrders);
+  marketBiasTracker.start();
+
   io.on("connection", (socket) => {
     socket.emit(SOCKET_EVENTS.MARKET_SNAPSHOT, getCurrentSnapshot());
     socket.emit(
@@ -76,6 +81,13 @@ export function createRealtimeServer(
   signalEngine.onAlert((alert) => {
     io.emit(SOCKET_EVENTS.MARKET_ALERT, alert);
     void options.database?.saveMarketAlert(alert);
+    
+    // Enviar a Telegram solo alertas de alta severidad
+    if (alert.severity === "high") {
+      const emoji = alert.type === "large_trade" ? "🐋" : "⚠️";
+      const telegramMessage = `<b>${emoji} NUEVA ALERTA: ${alert.symbol}</b>\n<i>${alert.message}</i>\nSeveridad: ${alert.severity.toUpperCase()}`;
+      telegramService.sendMessage(telegramMessage).catch(console.error);
+    }
   });
 
   signalEngine.onLargeTrade((largeTrade) => {

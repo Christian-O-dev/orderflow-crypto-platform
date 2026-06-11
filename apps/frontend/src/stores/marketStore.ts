@@ -58,6 +58,12 @@ type MarketState = {
   setChartTimeframe: (chartTimeframe: ChartTimeframe) => void;
   setAnalysisWindow: (analysisWindow: AnalysisWindow) => void;
   setDepthRange: (depthRange: LiquidityDepthRange) => void;
+  soundEnabled: boolean;
+  setSoundEnabled: (enabled: boolean) => void;
+  lastReadAlertTime: number;
+  markAllAlertsAsRead: () => void;
+  focusedTimestamp: number | null;
+  setFocusedTimestamp: (timestamp: number | null) => void;
 };
 
 export const useMarketStore = create<MarketState>()(
@@ -78,6 +84,12 @@ export const useMarketStore = create<MarketState>()(
   chartTimeframe: "1m",
   analysisWindow: "15m",
   depthRange: "1%",
+  soundEnabled: false,
+  lastReadAlertTime: 0,
+  focusedTimestamp: null,
+  setSoundEnabled: (enabled) => set({ soundEnabled: enabled }),
+  markAllAlertsAsRead: () => set({ lastReadAlertTime: Date.now() }),
+  setFocusedTimestamp: (timestamp) => set({ focusedTimestamp: timestamp }),
   setConnectionStatus: (connectionStatus) =>
     set((state) =>
       state.connectionStatus === connectionStatus ? state : { connectionStatus },
@@ -208,6 +220,8 @@ export const useMarketStore = create<MarketState>()(
         depthRange: state.depthRange,
         largeTrades: state.largeTrades,
         whaleOrders: state.whaleOrders,
+        soundEnabled: state.soundEnabled,
+        lastReadAlertTime: state.lastReadAlertTime,
         windowOrderFlowSummary: {
           ...state.windowOrderFlowSummary,
           cvdPoints: [], // Exclude massive array
@@ -221,6 +235,8 @@ export const useMarketStore = create<MarketState>()(
           depthRange: persistedState.depthRange ?? currentState.depthRange,
           largeTrades: persistedState.largeTrades ?? currentState.largeTrades,
           whaleOrders: persistedState.whaleOrders ?? currentState.whaleOrders,
+          soundEnabled: persistedState.soundEnabled ?? currentState.soundEnabled,
+          lastReadAlertTime: persistedState.lastReadAlertTime ?? currentState.lastReadAlertTime,
           windowOrderFlowSummary: persistedState.windowOrderFlowSummary ?? currentState.windowOrderFlowSummary,
         };
       },

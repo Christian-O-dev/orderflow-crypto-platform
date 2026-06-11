@@ -1,34 +1,32 @@
 import { useEffect } from "react";
-import { ResizableDashboard } from "./components/layout/ResizableDashboard";
-import { TerminalShell } from "./components/layout/TerminalShell";
-import { AlertsPanel } from "./components/market/AlertsPanel";
-import { LargeTradesPanel } from "./components/market/LargeTradesPanel";
-import { LiquidityPanel } from "./components/market/LiquidityPanel";
-import { MarketHeader } from "./components/market/MarketHeader";
-import { OrderFlowWindowSummaryPanel } from "./components/market/OrderFlowWindowSummaryPanel";
-import { TapeTable } from "./components/market/TapeTable";
-import { PriceChart } from "./features/charts/PriceChart";
-import { useHistoricalAggTrades } from "./hooks/useHistoricalAggTrades";
-import { connectMarketSocket } from "./sockets/marketSocket";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Dashboard } from "./features/dashboard/Dashboard";
+import { AuthPage } from "./features/auth/AuthPage";
+import { useAuthStore } from "./stores/authStore";
 
 function App() {
-  useHistoricalAggTrades();
+  const { checkAuth, isLoading } = useAuthStore();
 
-  useEffect(() => connectMarketSocket(), []);
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-[#070A0F] text-cyan-500">
+        Verificando sesión...
+      </div>
+    );
+  }
 
   return (
-    <TerminalShell>
-      <MarketHeader />
-      <OrderFlowWindowSummaryPanel />
-
-      <ResizableDashboard
-        alerts={<AlertsPanel />}
-        dom={<LiquidityPanel />}
-        largeTrades={<LargeTradesPanel />}
-        price={<PriceChart />}
-        tape={<TapeTable />}
-      />
-    </TerminalShell>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/" element={<Dashboard />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

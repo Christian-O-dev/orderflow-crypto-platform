@@ -14,6 +14,7 @@ import {
   isCandleInterval,
 } from "./exchanges/binance/BinanceKlineHistoryService.js";
 import { createRealtimeServer } from "./realtime/socketServer.js";
+import { createAuthRouter } from "./routes/auth.js";
 
 const envPath = [
   resolve(process.cwd(), ".env"),
@@ -116,6 +117,8 @@ const server = createServer(app);
 const database = new Database();
 await database.connect();
 createRealtimeServer(server, { database });
+
+app.use("/api/auth", createAuthRouter(database));
 
 server.listen(port, () => {
   console.log(`Backend listening on http://localhost:${port}`);

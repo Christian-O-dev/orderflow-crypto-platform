@@ -4,6 +4,14 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import type { MarketAlert, MarketSnapshot } from "../types/market.js";
 
+export interface UserRecord {
+  id: string;
+  email: string;
+  password_hash: string;
+  role: string;
+  created_at: Date;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export class Database {
@@ -102,6 +110,42 @@ export class Database {
         alert.timestamp,
       ],
     );
+  }
+
+  async getUserByEmail(email: string): Promise<UserRecord | null> {
+    if (!this.pool || !this.enabled) return null;
+    try {
+      const result = await this.pool.query<UserRecord>("SELECT * FROM users WHERE email = $1", [email]);
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error(`Database read failed: ${getErrorMessage(error)}`);
+      return null;
+    }
+  }
+
+  async getUserById(id: string): Promise<UserRecord | null> {
+    if (!this.pool || !this.enabled) return null;
+    try {
+      const result = await this.pool.query<UserRecord>("SELECT * FROM users WHERE id = $1", [id]);
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error(`Database read failed: ${getErrorMessage(error)}`);
+      return null;
+    }
+  }
+
+  async createUser(email: string, passwordHash: string): Promise<UserRecord | null> {
+    if (!this.pool || !this.enabled) return null;
+    try {
+      const result = await this.pool.query<UserRecord>(
+        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING *",
+        [email, passwordHash]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error(`Database write failed: ${getErrorMessage(error)}`);
+      return null;
+    }
   }
 
   private async runMigrations() {

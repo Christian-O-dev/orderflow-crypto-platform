@@ -21,11 +21,13 @@ export function DomTable({ framed = true }: DomTableProps) {
   const orderBook = useMarketStore(
     (state) => state.snapshot?.orderBook ?? EMPTY_ORDER_BOOK,
   );
+  
   const asks = orderBook
     .filter((level) => level.askSize > 0)
     .sort((left, right) => left.price - right.price)
     .slice(0, MAX_DOM_LEVELS)
     .reverse();
+    
   const bids = orderBook
     .filter((level) => level.bidSize > 0)
     .sort((left, right) => right.price - left.price)

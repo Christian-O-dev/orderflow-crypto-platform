@@ -3,8 +3,8 @@ import { useMarketStore } from "../../stores/marketStore";
 
 const labels = {
   connecting: "Conectando",
-  connected: "WS online",
-  disconnected: "WS offline",
+  connected: "Online",
+  disconnected: "Offline",
 };
 
 export function ConnectionStatus() {

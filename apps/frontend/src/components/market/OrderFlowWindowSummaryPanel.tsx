@@ -1,5 +1,6 @@
 import { useMarketStore } from "../../stores/marketStore";
 import clsx from "clsx";
+import { AnalysisWindowSelector } from "./AnalysisWindowSelector";
 
 const usdFormat = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
@@ -45,7 +46,12 @@ export function OrderFlowWindowSummaryPanel() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-3 mt-2">
-        <SummaryCard title="Window" value={summary.analysisWindow} />
+        <div className="flex flex-col bg-white/[0.02] border border-white/[0.05] rounded p-2">
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider">Window</span>
+          <div className="mt-1 flex items-center h-full">
+            <AnalysisWindowSelector />
+          </div>
+        </div>
         <SummaryCard 
           title="Delta" 
           value={volumeFormat.format(summary.delta)} 
