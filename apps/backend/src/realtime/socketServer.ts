@@ -27,7 +27,7 @@ export function createRealtimeServer(
 ) {
   const io = new Server(httpServer, {
     cors: {
-      origin: VITE_DEV_ORIGINS,
+      origin: "*", // Permite peticiones de WebSockets desde cualquier dominio
     },
   });
 

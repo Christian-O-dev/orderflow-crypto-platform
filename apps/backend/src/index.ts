@@ -30,7 +30,7 @@ const aggTradesHistoryService = new BinanceAggTradesHistoryService();
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: "*", // Permite peticiones desde Vercel o cualquier dominio
   }),
 );
 app.use(express.json());
