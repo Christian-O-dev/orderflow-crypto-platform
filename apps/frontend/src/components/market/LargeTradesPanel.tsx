@@ -1,7 +1,6 @@
 import type { LargeTradeEvent } from "@orderflow/shared";
 import clsx from "clsx";
 import { useChartOrderFlow } from "../../features/orderflow/useWindowOrderFlow";
-import { useMarketStore } from "../../stores/marketStore";
 
 const priceFormat = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,

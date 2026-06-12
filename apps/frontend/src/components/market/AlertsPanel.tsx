@@ -121,7 +121,6 @@ function FilterDropdown({ filter, setFilter }: { filter: FilterType, setFilter: 
 function AlertRow({ alert }: { alert: MarketAlert }) {
   const tone = getAlertTone(alert.severity);
   const lastReadTime = useMarketStore((state) => state.lastReadAlertTime);
-  const setFocusedTimestamp = useMarketStore((state) => state.setFocusedTimestamp);
   const isUnread = alert.timestamp > lastReadTime;
 
   return (
